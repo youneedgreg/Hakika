@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* Placeholder palette until Juliet's Day 1 brand colours are confirmed. */
+@theme inline {
+  --color-paper: #faf7f0;
+  --color-ink: #1c2220;
+  --color-muted: #5d6763;
+  --color-line: #e3ded2;
+  --color-surface: #ffffff;
+  --color-brand: #0f6b4f;
+  --color-brand-strong: #0a5039;
+  --color-brand-soft: #e2f1eb;
+  --color-accent: #c77d0a;
+  --color-accent-strong: #8a5306;
+  --color-accent-soft: #fbf0dc;
+  --color-danger: #b42318;
+  --color-danger-soft: #fde8e6;
+  --color-info: #1d5fa7;
+  --color-info-soft: #e4eefa;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
