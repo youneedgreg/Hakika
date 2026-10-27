@@ -34,7 +34,7 @@ beforeAll(async () => {
     id: "m1", projectId: "p1", position: 1, name: "Foundation", plannedStart: "2026-10-05", plannedEnd: "2026-10-31",
   });
   await db.insert(schema.requests).values({ id: "r1", projectId: "p1", milestoneId: "m1" });
-});
+}, 60_000); // a cold PGlite start plus the migration took ~8 s locally, close to the 10 s default
 
 const materials = (over: Partial<typeof schema.payments.$inferInsert> = {}) => ({
   projectId: "p1", kind: "materials" as const, requestId: "r1", payeeSupplierId: "s1",
