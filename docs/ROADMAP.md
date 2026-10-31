@@ -20,7 +20,8 @@ flowchart TB
   subgraph GREG["Greg: behind the screen"]
     direction TB
     G0["Done<br/>Shared types, mock routes,<br/>database, demo seed, state machines"]:::done
-    G1["In review, PR #3<br/>WhatsApp webhook, templates,<br/>Judge Mode simulate"]:::now
+    G1["Merged, PR #3<br/>WhatsApp webhook, templates,<br/>Judge Mode simulate"]:::done
+    G1B["Now<br/>Vercel variables, sandbox webhook,<br/>real phone test"]:::now
     G2["Tue 3 Nov<br/>Voice notes, Nova parsing,<br/>pricing engine"]:::next
     G3["Wed 4 Nov<br/>Owner summary,<br/>PayPal create and capture"]:::next
     G4["Thu 5 Nov<br/>PayPal webhooks, confirmations,<br/>proof requests and upload"]:::next
@@ -30,13 +31,13 @@ flowchart TB
     G8["Mon 9 Nov<br/>Security pass, tests,<br/>AI eval numbers"]:::next
     G9["Tue 10 Nov<br/>README technical sections,<br/>QA fixes"]:::next
     G10["Wed 11 Nov<br/>Devpost technical sections,<br/>testing instructions"]:::next
-    G0 --> G1 --> G2 --> G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10
+    G0 --> G1 --> G1B --> G2 --> G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10
   end
 
   subgraph JULIET["Juliet: what judges see and hear"]
     direction TB
     J0["Done<br/>Design system components,<br/>app shell"]:::done
-    J1["By Mon 2 Nov<br/>Review PR #3, template copy, price sheet,<br/>voice notes, code and site photos"]:::now
+    J1["By Mon 2 Nov<br/>Template copy, price sheet,<br/>voice notes, code and site photos"]:::now
     J2["Tue 3 Nov<br/>Overview page,<br/>approval card, PayPal button"]:::next
     J3["Wed 4 Nov<br/>Bryntum Gantt<br/>on mock data"]:::next
     J4["Thu 5 Nov<br/>Approval card on real routes,<br/>money trail page"]:::next
@@ -51,7 +52,7 @@ flowchart TB
 
   subgraph BOTH["Together: gates"]
     direction TB
-    B1{{"Gate 0, after PR #3 merges<br/>A real WhatsApp message is<br/>stored and answered"}}:::gate
+    B1{{"Gate 0, by Mon 2 Nov<br/>A real WhatsApp message is<br/>stored and answered"}}:::gate
     B2{{"Gate 1, Wed 4 Nov<br/>Quote becomes an approval card;<br/>approve in PayPal; shows Paid"}}:::gate
     B3{{"Gate 2, Sat 7 Nov<br/>Full money loop on the hosted demo,<br/>no database edits by hand"}}:::gate
     B4{{"Gate 3, Tue 10 Nov<br/>Dress rehearsal runs twice<br/>with no manual fixes"}}:::gate
@@ -59,7 +60,6 @@ flowchart TB
     B1 --> B2 --> B3 --> B4 --> B5
   end
 
-  J1 -.->|review and merge| G1
   J1 -.->|prices, voice notes| G2
   J1 -.->|test photos| G5
   G3 -.->|payment routes| J4
@@ -69,7 +69,7 @@ flowchart TB
   G8 -.->|working app to record| J8
   J8 -.->|bug list| G9
 
-  G1 --> B1
+  G1B --> B1
   G3 --> B2
   J2 --> B2
   G6 --> B3
@@ -86,7 +86,7 @@ flowchart TB
 
 | Date | Greg | Juliet | Gate |
 |---|---|---|---|
-| **By Mon 2 Nov** | Merge follow-up for PR #3: Vercel variables, sandbox webhook, real phone test | Review PR #3. Send template copy (EN and SW), price sheet and quotes, Swahili voice notes, code photos and site photos | **Gate 0:** a real WhatsApp message is stored and answered with a template |
+| **By Mon 2 Nov** | Now that PR #3 has merged: Vercel variables, sandbox webhook, real phone test | Send template copy (EN and SW), price sheet and quotes, Swahili voice notes, code photos and site photos | **Gate 0:** a real WhatsApp message is stored and answered with a template |
 | **Tue 3 Nov** | Groq Whisper translation, Nova parsing and quote reading, pricing engine, daily USD/KES rate, at least 12 pricing tests | Overview page, approval card and PayPal button on mock data | A quote photo becomes a parsed request; pricing tests pass |
 | **Wed 4 Nov** | Owner summary with number guard, PayPal create order (supplier as payee) and capture | Bryntum Gantt on mock data | **Gate 1:** quote to approval card, approve in PayPal sandbox, shows Paid |
 | **Thu 5 Nov** | PayPal webhooks, WhatsApp confirmations, audit events, proof codes, single-use links, upload, WhatsApp pin fallback | Approval card on real routes, money trail page | Payments appear in the money trail; a phone proof is stored with code, location and time |
