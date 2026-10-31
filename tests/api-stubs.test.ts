@@ -2,7 +2,7 @@
 // can't send an amount). Handlers are called directly, without a server.
 
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GET as getProject } from "@/app/api/projects/[id]/route";
 import { GET as getOverview } from "@/app/api/projects/[id]/overview/route";
@@ -18,11 +18,13 @@ import { POST as chat } from "@/app/api/agent/chat/route";
 import { GET as getLedger } from "@/app/api/ledger/route";
 import { POST as simulate } from "@/app/api/judge/simulate/route";
 import { POST as reset } from "@/app/api/judge/reset/route";
-import { POST as twilioWebhook } from "@/app/api/webhooks/twilio/route";
 import { POST as paypalWebhook } from "@/app/api/webhooks/paypal/route";
 import {
   DEMO_PROJECT_ID, DEMO_PROOF_IDS, DEMO_PROOF_TOKEN, DEMO_REQUEST_ID,
 } from "@/server/mocks/demo";
+
+// Handlers run without a server here, so work scheduled for after the response is skipped.
+vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: vi.fn() }));
 
 const BASE = "http://localhost:3000";
 
@@ -204,7 +206,6 @@ describe("ledger, agent and Judge Mode routes", () => {
 
 describe("webhooks", () => {
   it("answer 501 until they are built", async () => {
-    expect((await twilioWebhook()).status).toBe(501);
     expect((await paypalWebhook()).status).toBe(501);
   });
 });
