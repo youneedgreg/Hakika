@@ -14,6 +14,14 @@ export type IntakeDeps = {
   loadMedia: (url: string) => Promise<MediaFile>;
   storeMedia: (path: string, file: MediaFile) => Promise<string>;
   send: (to: string, body: string) => Promise<string>;
+  afterReply?: (stored: StoredInbound) => Promise<void>; // the slow reading work, once the message is safe and answered
+};
+
+export type StoredInbound = {
+  contact: Contact;
+  messageId: string;
+  message: InboundMessage;
+  file: MediaFile | null; // null when there was no media, or it could not be saved
 };
 
 export type InboundMessage = {
@@ -67,22 +75,35 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
   if (!stored) return null;
 
   let template: TemplateKey = message.unsupported ? "needs_info" : "request_received";
+  let file: MediaFile | null = null;
   if (message.media) {
     try {
-      const file = await deps.loadMedia(message.media.url);
-      const mediaPath = await deps.storeMedia(`whatsapp/${stored.id}.${file.extension}`, file);
+      const loaded = await deps.loadMedia(message.media.url);
+      const mediaPath = await deps.storeMedia(`whatsapp/${stored.id}.${loaded.extension}`, loaded);
       await db.update(s.messages)
-        .set({ mediaPath, mediaContentType: file.contentType })
+        .set({ mediaPath, mediaContentType: loaded.contentType })
         .where(eq(s.messages.id, stored.id));
+      file = loaded;
     } catch (error) {
       console.error("WhatsApp media was not saved:", describeError(error));
       template = "needs_info";
     }
   }
 
+  await replyWithTemplate(deps, contact, message, template);
+  await deps.afterReply?.({ contact, messageId: stored.id, message, file });
+  return stored.id;
+}
+
+export async function replyWithTemplate(
+  deps: Pick<IntakeDeps, "db" | "send">,
+  contact: Contact,
+  message: InboundMessage,
+  template: TemplateKey,
+): Promise<void> {
   const body = renderTemplate(template, contact.language);
   const twilioSid = message.channel === "whatsapp" ? await deps.send(message.replyTo, body) : null;
-  await db.insert(s.messages).values({
+  await deps.db.insert(s.messages).values({
     projectId: contact.projectId,
     contactId: contact.id,
     direction: "outbound",
@@ -93,7 +114,6 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
     language: contact.language,
     twilioSid,
   });
-  return stored.id;
 }
 
 // Safe to log: database errors can quote a query's values, which may include a message or a number.

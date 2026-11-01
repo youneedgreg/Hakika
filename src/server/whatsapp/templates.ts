@@ -14,6 +14,10 @@ const TEMPLATES = {
     en: "Hakika: we could not read that. Please send a photo, a voice note or a text message.",
     sw: "Hakika: hatukuweza kusoma hilo. Tafadhali tuma picha, ujumbe wa sauti au ujumbe wa maandishi.",
   },
+  quote_needed: {
+    en: "Hakika: please send a photo of the quote for these materials.",
+    sw: "Hakika: tafadhali tuma picha ya nukuu ya bei ya vifaa hivi.",
+  },
 } as const satisfies Record<string, Record<Language, string>>;
 
 export type TemplateKey = keyof typeof TEMPLATES;
