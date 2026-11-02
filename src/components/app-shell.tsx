@@ -5,7 +5,11 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 // Add owner screens here as they land so the shell stays the single source of navigation.
-const navItems = [{ href: "/components", label: "Components" }];
+const navItems = [
+  { href: "/projects/demo-nyeri", label: "Project" },
+  { href: "/judge", label: "Judge Mode" },
+  { href: "/components", label: "Components" },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -25,7 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <nav aria-label="Main" className="flex gap-1">
             {navItems.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}
