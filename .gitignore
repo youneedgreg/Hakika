@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# copied from node_modules by the prebuild script
+/public/vendor/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

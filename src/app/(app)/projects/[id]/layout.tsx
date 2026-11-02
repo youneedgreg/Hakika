@@ -1,17 +1,23 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { ProjectNav } from "@/components/project-nav";
 
-export default async function ProjectLayout({
+async function Nav({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <ProjectNav projectId={id} />;
+}
+
+export default function ProjectLayout({
   children,
   params,
 }: {
   children: ReactNode;
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
   return (
     <>
-      <ProjectNav projectId={id} />
+      <Suspense>
+        <Nav params={params} />
+      </Suspense>
       {children}
     </>
   );

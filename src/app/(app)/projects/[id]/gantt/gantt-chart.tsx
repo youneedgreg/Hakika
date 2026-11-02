@@ -5,9 +5,13 @@ import "@bryntum/gantt/gantt.css";
 import "@bryntum/gantt/stockholm-light.css";
 import "@bryntum/gantt/fontawesome/css/fontawesome.css";
 import "@bryntum/gantt/fontawesome/css/solid.css";
-import { statusLabel, toBryntumProject } from "./gantt-data";
+import { statusLabel, timelineRange, toBryntumProject } from "./gantt-data";
 import type { GanttData } from "@/shared/api";
 import type { MilestoneStatus } from "@/shared/types";
+
+type GanttConstructor = typeof import("@bryntum/gantt").Gantt;
+
+const GANTT_MODULE_URL: string = "/vendor/bryntum-gantt.module.js";
 
 export function GanttChart({ data }: { data: GanttData }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,14 +26,17 @@ export function GanttChart({ data }: { data: GanttData }) {
     if (!container) return;
 
     let cancelled = false;
-    let instance: { destroy: () => void } | null = null;
+    let instance: InstanceType<GanttConstructor> | null = null;
 
-    // Bryntum touches the DOM and window on load, so it is imported only in the browser.
-    void import("@bryntum/gantt").then(({ Gantt }) => {
+    // Loaded from public/vendor at runtime (copied by the prebuild script) so the bundler never compiles it.
+    void (import(
+      /* turbopackIgnore: true */ /* webpackIgnore: true */ GANTT_MODULE_URL
+    ) as Promise<{ Gantt: GanttConstructor }>).then(({ Gantt }) => {
       if (cancelled) return;
       instance = new Gantt({
         appendTo: container,
         readOnly: true,
+        ...(data.tasks.length > 0 ? timelineRange(data.tasks) : {}),
         project,
         columns: [
           { type: "name", text: "Milestone", width: 260 },
@@ -43,13 +50,16 @@ export function GanttChart({ data }: { data: GanttData }) {
           },
         ],
       });
+      void instance.project.commitAsync().then(() => {
+        if (!cancelled) instance?.zoomToFit({ leftMargin: 20, rightMargin: 20 });
+      });
     });
 
     return () => {
       cancelled = true;
       instance?.destroy();
     };
-  }, [project, statusById]);
+  }, [project, statusById, data.tasks]);
 
   return (
     <div

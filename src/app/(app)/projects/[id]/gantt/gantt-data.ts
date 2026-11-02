@@ -20,6 +20,13 @@ export type BryntumProject = {
   dependenciesData: GanttDependencyRecord[];
 };
 
+// The visible range, so the chart opens on the project plan instead of today's date.
+export function timelineRange(tasks: GanttTask[]): { startDate: string; endDate: string } {
+  const starts = tasks.map((task) => task.startDate.slice(0, 10)).sort();
+  const ends = tasks.map((task) => dayAfter(task.endDate.slice(0, 10))).sort();
+  return { startDate: starts[0], endDate: dayAfter(dayAfter(ends[ends.length - 1])) };
+}
+
 // Colours match the status pills in globals.css so the chart and the lists read the same.
 const statusColour: Record<MilestoneStatus, string> = {
   planned: "#9ca3af",
