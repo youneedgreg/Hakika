@@ -18,7 +18,9 @@
     "node": ">=24"
   },
   "dependencies": {
+    "@bryntum/gantt": "npm:@bryntum/gantt-trial@7.3.8",
     "@neondatabase/serverless": "1.2.0",
+    "@paypal/react-paypal-js": "10.6.1",
     "@vercel/blob": "2.8.2",
     "better-auth": "1.7.14",
     "drizzle-orm": "0.45.4",

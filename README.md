@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hakika
 
-## Getting Started
+Hakika helps an owner approve construction purchases and release payments only after work is supported by evidence from the site. This demo uses fictional people and sample project data.
 
-First, run the development server:
+## Built with
+
+- Next.js, React, TypeScript, and Tailwind CSS
+- Neon Postgres and Vercel Blob
+- PayPal sandbox and Twilio WhatsApp sandbox
+- Bryntum Gantt
+
+## Planned AI services
+
+The planned AI integrations are **Amazon Nova on Amazon Bedrock** for quote/proof analysis and **Groq Whisper large-v3** for Swahili voice-note transcription. The current checked-in mock UI does not call these AI services yet.
+
+## Local development
+
+Install dependencies and start the development server:
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env.example` to `.env.local` and add sandbox credentials only when testing integrations that require them. Mock API routes are marked with the `x-hakika-mock: 1` response header.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Validation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run lint
+npm run typecheck
+npm test
+```
