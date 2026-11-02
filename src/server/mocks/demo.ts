@@ -98,7 +98,7 @@ export const approvalCard: ApprovalCard = {
     },
     {
       type: "unverified_supplier", severity: "warn",
-      message: "Baraka Hardware, on the quote, is not a verified supplier.",
+      message: "Baraka Hardware, on the quote, is not a verified supplier; the cheapest verified alternative is Mlima Hardware at KES 39,500.",
       data: { supplierName: "Baraka Hardware" },
     },
     {
