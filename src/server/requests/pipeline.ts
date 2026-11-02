@@ -1,17 +1,18 @@
 // From a stored WhatsApp message to a price-checked request. Only a foreman's messages go to the
 // models. A quote photo becomes a request; a text or voice note asking for materials gets asked for
-// the quote. Models read; the price check decides; nothing here can move money. The request stops at
-// "checked": the owner's summary and approval come next.
+// the quote. Models read; the price check decides; nothing here can move money. A quote with a total
+// goes to the owner for approval. One without stays at "checked" until the foreman sends it again.
 
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import type { ExplainFindings } from "@/server/ai/explain";
 import type { ParsedMessage } from "@/server/ai/parse-message";
 import type { CatalogItem } from "@/server/ai/nova";
 import type { ReadQuote } from "@/server/ai/quote";
 import type { Translation } from "@/server/ai/translate";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
-import { checkPrices, type PriceCheckInput, type PriceCheckResult } from "@/server/pricing/engine";
-import { formatKes } from "@/server/pricing/money";
+import { checkPrices, type PriceCheckInput } from "@/server/pricing/engine";
+import { writeOwnerSummary } from "@/server/requests/summary";
 import { requestMachine } from "@/server/state/machines";
 import { describeError, replyWithTemplate, type IntakeDeps, type StoredInbound } from "@/server/whatsapp/intake";
 import type { MediaFile } from "@/server/whatsapp/media";
@@ -20,6 +21,7 @@ export type ReadingModels = {
   translate: (file: MediaFile) => Promise<Translation>;
   readQuote: (file: MediaFile, catalog: CatalogItem[]) => Promise<ReadQuote>;
   parseMessage: (message: { text: string; source: "text" | "voice" }, catalog: CatalogItem[]) => Promise<ParsedMessage>;
+  explainFindings: ExplainFindings;
 };
 
 type Deps = Pick<IntakeDeps, "db" | "send">;
@@ -117,15 +119,19 @@ async function handleQuotePhoto(deps: Deps, models: ReadingModels, stored: Store
 
   const parsedStatus = requestMachine.transition("received", "parsed");
   const checkedStatus = requestMachine.transition(parsedStatus, "checked");
+  const canApprove = result.quotedTotalKesCents !== null;
+  // Outside the transaction: a model call shouldn't hold a database connection open.
+  const written = await writeOwnerSummary(models.explainFindings, contact.name, input.quotedSupplier, result);
+
   await db.transaction(async (tx) => {
     await tx.update(s.requests).set({
-      status: checkedStatus,
+      status: canApprove ? requestMachine.transition(checkedStatus, "sent_for_approval") : checkedStatus,
       quotedSupplierId: input.quotedSupplier.id,
       quotedSupplierName: quote.supplierName,
       quotedTotalKesCents: result.quotedTotalKesCents ?? quote.statedTotalKesCents,
       recommendedSupplierId: result.recommended?.supplierId ?? null,
       recommendedTotalKesCents: result.recommended?.totalKesCents ?? null,
-      summary: writeSummary(contact.name, input.quotedSupplier.name, result),
+      summary: written.summary,
       parsed: quote.raw as object,
     }).where(eq(s.requests.id, requestId));
     if (complete.length > 0) {
@@ -144,9 +150,15 @@ async function handleQuotePhoto(deps: Deps, models: ReadingModels, stored: Store
       await tx.insert(s.findings).values(result.findings.map((finding, position) => ({ requestId, position, ...finding })));
     }
     await audit(tx, contact, requestId, "request.checked", `The quote was read and checked: ${result.findings.length} findings.`);
+    if (canApprove) {
+      await audit(tx, contact, requestId, "request.sent_for_approval", "The request was sent to the owner for approval.", {
+        summarySource: written.source,
+        ...(written.rejected ? { summaryRejected: written.rejected } : {}),
+      });
+    }
   });
 
-  if (result.quotedTotalKesCents === null) await replyWithTemplate(deps, contact, message, "needs_info");
+  if (!canApprove) await replyWithTemplate(deps, contact, message, "needs_info");
 }
 
 async function failRequest(
@@ -158,30 +170,22 @@ async function failRequest(
   parsed?: object,
 ) {
   await db.update(s.requests)
-    .set({ status: requestMachine.transition("received", "parse_failed"), ...(parsed ? { parsed } : {}) })
+    .set({ status: requestMachine.transition("received", "parse_failed"), summary: description, ...(parsed ? { parsed } : {}) })
     .where(eq(s.requests.id, requestId));
   await audit(db, contact, requestId, action, description);
 }
 
-function audit(db: AnyDb, contact: StoredInbound["contact"], requestId: string, action: string, description: string) {
+function audit(
+  db: AnyDb,
+  contact: StoredInbound["contact"],
+  requestId: string,
+  action: string,
+  description: string,
+  data?: object,
+) {
   return db.insert(s.auditEvents).values({
-    projectId: contact.projectId, kind: "request", action, description, requestId, actor: `contact:${contact.id}`,
+    projectId: contact.projectId, kind: "request", action, description, requestId, actor: `contact:${contact.id}`, data,
   });
-}
-
-// Written by code, so every number in it is one the price check produced.
-function writeSummary(contactName: string, supplierName: string, result: PriceCheckResult): string {
-  const { quotedTotalKesCents: total, recommended, findings } = result;
-  const sentences = [
-    total === null
-      ? `${contactName} sent a quote from ${supplierName} with details missing.`
-      : `${contactName} sent a quote from ${supplierName} for ${formatKes(total)}.`,
-  ];
-  if (recommended && recommended.supplierName !== supplierName) {
-    sentences.push(`${recommended.supplierName}, a verified supplier, can supply the order for ${formatKes(recommended.totalKesCents)}.`);
-  }
-  if (findings.some((finding) => finding.severity === "block")) sentences.push("It needs your attention before any payment.");
-  return sentences.join(" ");
 }
 
 async function currentMilestone(db: AnyDb, projectId: string) {

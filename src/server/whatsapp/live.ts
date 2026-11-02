@@ -1,6 +1,7 @@
 // The pipeline's real connections, for the API routes. Tests pass fakes instead.
 
 import { put } from "@vercel/blob";
+import { explainFindings } from "@/server/ai/explain";
 import { parseMessage } from "@/server/ai/parse-message";
 import { readQuote } from "@/server/ai/quote";
 import { translateVoiceNote } from "@/server/ai/translate";
@@ -21,7 +22,7 @@ export function twilioDeps(): IntakeDeps {
     loadMedia: fetchTwilioMedia,
     storeMedia,
     send: sendWhatsApp,
-    afterReply: (stored) => runRequestPipeline(deps, { translate: translateVoiceNote, readQuote, parseMessage }, stored),
+    afterReply: (stored) => runRequestPipeline(deps, { translate: translateVoiceNote, readQuote, parseMessage, explainFindings }, stored),
   };
   return deps;
 }
