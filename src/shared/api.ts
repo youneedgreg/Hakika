@@ -29,7 +29,7 @@ export type ProjectOverview = {
   currentMilestone: { id: string; name: string; status: MilestoneStatus };
   approvals: { requestId: string; title: string; status: RequestStatus; total: Money; createdAt: string }[];
   alerts: {
-    id: string; kind: "payment_held" | "price_warning" | "proof_overdue";
+    id: string; kind: "payment_held" | "price_warning" | "proof_overdue" | "quote_problem";
     severity: "info" | "warn" | "block"; message: string;
     link: { proofId?: string; requestId?: string };
   }[];

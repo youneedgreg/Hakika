@@ -1,11 +1,12 @@
-// GET /api/projects/[id]/overview — the owner dashboard. Mock data until the database is built.
+// GET /api/projects/[id]/overview — the owner dashboard, from the database.
 
 import type { NextRequest } from "next/server";
-import { mockJson, notFound } from "@/server/http";
-import { DEMO_PROJECT_ID, overview } from "@/server/mocks/demo";
+import { getDb } from "@/server/db/client";
+import { notFound } from "@/server/http";
+import { loadOverview } from "@/server/projects/overview";
 
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/projects/[id]/overview">) {
   const { id } = await ctx.params;
-  if (id !== DEMO_PROJECT_ID) return notFound("Project");
-  return mockJson(overview);
+  const overview = await loadOverview(getDb(), id);
+  return overview ? Response.json(overview) : notFound("Project");
 }
