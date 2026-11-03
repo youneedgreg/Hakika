@@ -2,7 +2,7 @@ type Photo = { src: string; label: string; caption?: string };
 
 export function PhotoCompare({ left, right }: { left: Photo; right: Photo }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {[left, right].map((photo) => (
         <figure key={photo.label} className="overflow-hidden rounded-xl border border-line bg-surface">
           {/* Proof photos are served from Vercel Blob URLs, which next/image would need configured to load. */}
