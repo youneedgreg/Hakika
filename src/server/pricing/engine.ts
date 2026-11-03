@@ -43,7 +43,9 @@ export type PriceCheckResult = {
 
 type CompleteLine = QuotedLine & { qty: number; unitPriceKesCents: number };
 
-const sameUnit = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+// "Bags" and "bag" are one unit. Only a final s goes: "pcs" and "piece" stay different and aren't compared.
+const singularUnit = (unit: string) => unit.trim().toLowerCase().replace(/([^s])s$/, "$1");
+const sameUnit = (a: string, b: string) => singularUnit(a) === singularUnit(b);
 const scaled = (qty: number) => Math.round(qty * QTY_SCALE);
 const lineTotal = (unitPriceKesCents: number, qty: number) =>
   Math.round((unitPriceKesCents * scaled(qty)) / QTY_SCALE);
@@ -60,7 +62,7 @@ function priceFinding(line: CompleteLine, medianKesCents: number): Finding | nul
     type: "price_above_market",
     severity: above(BLOCK_ABOVE_MEDIAN_PERCENT) ? "block" : "warn",
     // "Cement, 50 kg bag" reads as "Cement" here, because the sentence already gives the unit.
-    message: `${line.description.split(",")[0]} is quoted at ${formatKes(price)} a ${line.unit}, ${percentAbove}% above the verified median of ${formatKes(medianKesCents)}.`,
+    message: `${line.description.split(",")[0]} is quoted at ${formatKes(price)} a ${singularUnit(line.unit)}, ${percentAbove}% above the verified median of ${formatKes(medianKesCents)}.`,
     data: { itemKey: line.itemKey, quoted: centsToAmount(price), median: centsToAmount(medianKesCents), percentAbove },
   };
 }
