@@ -116,7 +116,7 @@ export const approvalCard: ApprovalCard = {
 export const proofReviews: Record<string, ProofReview> = {
   [DEMO_PROOF_IDS.verified]: {
     proofId: DEMO_PROOF_IDS.verified,
-    imageUrl: "/mock/proof-cement-delivery.png",
+    imageUrl: "/mock/proof/proof-cement-delivery.jpg",
     receivedAt: "2026-10-24T10:12:00Z",
     capture: { lat: -0.42016, lng: 36.94771, accuracyM: 12 },
     site: SITE,
@@ -134,7 +134,7 @@ export const proofReviews: Record<string, ProofReview> = {
   },
   [DEMO_PROOF_IDS.suspicious]: {
     proofId: DEMO_PROOF_IDS.suspicious,
-    imageUrl: "/mock/proof-foundation-recycled.png",
+    imageUrl: "/mock/proof/proof-foundation-aggregate.jpg",
     receivedAt: "2026-10-26T16:40:00Z",
     capture: { lat: -0.0917, lng: 37.0062, accuracyM: 20 },
     site: SITE,
@@ -144,7 +144,7 @@ export const proofReviews: Record<string, ProofReview> = {
       {
         name: "duplicate", result: "fail", hard: true,
         detail: "Matches a proof sent on 5 October.",
-        evidence: { matchImageUrl: "/mock/proof-excavation.jpg", hamming: 3 },
+        evidence: { matchImageUrl: "/mock/proof/excavation.jpg", hamming: 3 },
       },
       {
         name: "location", result: "fail", hard: true,

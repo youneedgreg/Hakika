@@ -38,7 +38,7 @@ export const scenarios: Scenario[] = [
       {
         from: "otieno",
         kind: "image",
-        mediaPath: "/mock/proof-cement-delivery.png",
+        mediaPath: "/mock/proof/proof-cement-delivery.jpg",
         location: AT_SITE,
       },
     ],
@@ -52,7 +52,7 @@ export const scenarios: Scenario[] = [
       {
         from: "otieno",
         kind: "image",
-        mediaPath: "/mock/proof-foundation-recycled.png",
+        mediaPath: "/mock/proof/proof-foundation-aggregate.jpg",
         location: FAR_FROM_SITE,
       },
     ],
