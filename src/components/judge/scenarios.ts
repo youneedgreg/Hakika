@@ -52,7 +52,7 @@ export const scenarios: Scenario[] = [
       {
         from: "otieno",
         kind: "image",
-        mediaPath: "/mock/proof/proof-foundation-aggregate.jpg",
+        mediaPath: "/mock/proof/proof-foundation-recycled.png",
         location: FAR_FROM_SITE,
       },
     ],
