@@ -101,11 +101,11 @@ describe("payment routes", () => {
     expect((await res.json()).error.code).toBe("invalid_json");
   });
 
-  it("captures the mock order and 404s anything else", async () => {
+  // Real orders go to the database and PayPal: tests/payments.test.ts.
+  it("captures the demo's mock order", async () => {
     const ok = await captureOrder(post("/x", {}), ctx({ orderId: "MOCK0RDER00000003" }));
+    expect(ok.headers.get("x-hakika-mock")).toBe("1");
     expect((await ok.json()).status).toBe("paid");
-    const missing = await captureOrder(post("/x", {}), ctx({ orderId: "OTHER" }));
-    expect(missing.status).toBe(404);
   });
 });
 
