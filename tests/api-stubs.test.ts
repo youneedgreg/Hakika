@@ -165,16 +165,8 @@ describe("proof routes", () => {
 });
 
 describe("ledger, agent and Judge Mode routes", () => {
-  it("returns ledger rows as JSON and CSV", async () => {
-    const json = await (await getLedger(get(`/api/ledger?projectId=${DEMO_PROJECT_ID}`))).json();
-    expect(json.rows.length).toBeGreaterThan(0);
-
-    const csv = await getLedger(get(`/api/ledger?projectId=${DEMO_PROJECT_ID}&format=csv`));
-    expect(csv.headers.get("content-type")).toContain("text/csv");
-    const lines = (await csv.text()).trim().split("\r\n");
-    expect(lines[0]).toBe("at,kind,description,amount,currency,amount_usd,paypal_order_id,paypal_capture_id,request_id,proof_id");
-    expect(lines).toHaveLength(json.rows.length + 1);
-
+  it("asks for a project ID before reading the ledger", async () => {
+    // The rows come from the database: tests/payments.test.ts.
     expect((await getLedger(get("/api/ledger"))).status).toBe(400);
   });
 

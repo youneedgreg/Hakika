@@ -12,6 +12,8 @@ import { captureOrderForRequest, createOrderForRequest, type PaymentDeps } from 
 import { PayPalApiError, type PayPalClient, type PayPalOrder } from "@/server/payments/paypal";
 import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks";
 import { sendPaymentConfirmations } from "@/server/payments/confirmations";
+import { loadLedger } from "@/server/projects/ledger";
+import { ledgerToCsv } from "@/server/csv";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -553,5 +555,54 @@ describe("WhatsApp confirmations after a supplier is paid", () => {
     const send = vi.fn(async () => "SM-1");
     expect(await sendPaymentConfirmations({ db, send, testPhones: new Map() }, payment.id)).toEqual([]);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("the money trail (GET /api/ledger)", () => {
+  it("shows a sandbox payment with its amounts, order ID and capture ID, oldest first", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const captured = rows.find((row) => row.paypalCaptureId === `CAP-${orderId}`);
+    expect(captured).toEqual({
+      at: expect.any(String),
+      kind: "payment",
+      description: "USD 303.89 was paid through PayPal to Mlima Hardware.",
+      amount: { amount: "39500.00", currency: "KES" },
+      amountUsd: { amount: "303.89", currency: "USD" },
+      paypalOrderId: orderId,
+      paypalCaptureId: `CAP-${orderId}`,
+      link: { requestId: request.id },
+    });
+    expect(rows.map((row) => row.at)).toEqual([...rows.map((row) => row.at)].sort());
+    expect(rows.indexOf(rows.find((row) => row.description.startsWith("A PayPal order"))!))
+      .toBeLessThan(rows.indexOf(captured!));
+  });
+
+  it("leaves out milestone events, which the UI contract has no kind for yet", async () => {
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const seeded = await db.select().from(s.auditEvents).where(eq(s.auditEvents.kind, "milestone"));
+    expect(seeded.length).toBeGreaterThan(0);
+    expect(rows.some((row) => seeded.some((event) => event.description === row.description))).toBe(false);
+  });
+
+  it("exports the same rows as CSV", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const lines = ledgerToCsv(rows).trim().split("\r\n");
+    expect(lines).toHaveLength(rows.length + 1);
+    expect(lines.find((line) => line.includes(`CAP-${orderId}`)))
+      .toContain(`payment,USD 303.89 was paid through PayPal to Mlima Hardware.,39500.00,KES,303.89,${orderId},CAP-${orderId},${request.id},`);
+  });
+
+  it("is null for a project that doesn't exist", async () => {
+    expect(await loadLedger(db, "nope")).toBeNull();
   });
 });
