@@ -606,3 +606,39 @@ describe("the money trail (GET /api/ledger)", () => {
     expect(await loadLedger(db, "nope")).toBeNull();
   });
 });
+
+describe("holds from proof verdicts (Day 12)", () => {
+  const holdMilestone = () => db.update(s.milestones).set({ status: "held" }).where(eq(s.milestones.id, "m2"));
+
+  it("refuses a new order while another request on the milestone is held, without calling PayPal", async () => {
+    await addRequest({ milestoneId: "m2", status: "held" });
+    const request = await addRequest({ milestoneId: "m2" });
+    const outcome = await createOrderForRequest(db, request.id, deps());
+    expect(outcome).toMatchObject({ ok: false, httpStatus: 409, code: "milestone_held", message: expect.stringMatching(/^Payments for this milestone are held/) });
+    expect(sandbox.counts.create).toBe(0);
+    expect(await paymentsFor(request.id)).toHaveLength(0);
+  });
+
+  it("refuses a new order while the milestone itself is held", async () => {
+    await holdMilestone();
+    const request = await addRequest({ milestoneId: "m2" });
+    expect(await createOrderForRequest(db, request.id, deps())).toMatchObject({ ok: false, code: "milestone_held" });
+  });
+
+  it("refuses the capture when the hold started after the order was created, so nothing is paid", async () => {
+    const request = await addRequest({ milestoneId: "m2" });
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await addRequest({ milestoneId: "m2", status: "held" });
+
+    expect(await captureOrderForRequest(db, orderId, deps())).toMatchObject({ ok: false, code: "milestone_held" });
+    expect(sandbox.counts.capture).toBe(0);
+    expect(await requestStatus(request.id)).toBe("awaiting_approval");
+  });
+
+  it("doesn't hold payments on other milestones", async () => {
+    await holdMilestone();
+    const request = await addRequest({ milestoneId: "m3" });
+    expect((await createOrderForRequest(db, request.id, deps())).ok).toBe(true);
+  });
+});

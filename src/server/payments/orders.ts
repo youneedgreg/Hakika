@@ -11,6 +11,7 @@ import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
 import { getDailyRate } from "@/server/pricing/fx";
 import { centsToAmount, kesCentsToUsdCents } from "@/server/pricing/money";
+import { HELD_MESSAGE, milestoneHold } from "@/server/proofs/holds";
 import { paymentMachine, requestMachine } from "@/server/state/machines";
 import type { CaptureResult, CreateOrderResult } from "@/shared/api";
 import { captureOf, PayPalApiError, type PayPalCapture, type PayPalClient } from "./paypal";
@@ -51,6 +52,7 @@ export async function createOrderForRequest(
     if (request.status !== "awaiting_approval") {
       return fail(409, "not_awaiting_approval", `This request is ${request.status.replaceAll("_", " ")}, so it can't be paid now.`);
     }
+    if (request.milestoneId && await milestoneHold(tx, request.milestoneId)) return fail(409, "milestone_held", HELD_MESSAGE);
     const blocking = await tx.select({ id: s.findings.id }).from(s.findings).where(and(
       eq(s.findings.requestId, requestId), eq(s.findings.severity, "block"), isNull(s.findings.acknowledgedAt),
     ));
@@ -149,6 +151,8 @@ export async function captureOrderForRequest(
     if (request.status !== "awaiting_approval") {
       return fail(409, "not_awaiting_approval", `This request is ${request.status.replaceAll("_", " ")}, so it can't be paid now.`);
     }
+    // A hold that started after the order was created still stops the capture.
+    if (request.milestoneId && await milestoneHold(tx, request.milestoneId)) return fail(409, "milestone_held", HELD_MESSAGE);
 
     // Another order for this request may have been paid at PayPal without being recorded here
     // (a crash after PayPal answered). Record it and refuse, rather than pay a second time.

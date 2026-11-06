@@ -14,6 +14,7 @@ import type { AnyDb } from "@/server/db/client";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
+import { milestoneHold } from "@/server/proofs/holds";
 import { issueProofRequest } from "@/server/proofs/requests";
 import { isWellFormedProofId, loadProofReview, proofImageResponse } from "@/server/proofs/review";
 import { verifyProof, verifyStoredProof } from "@/server/proofs/verdicts";
@@ -407,6 +408,70 @@ describe("verdicts with the vision model (Day 12)", () => {
       expect(vision.inspect).not.toHaveBeenCalled();
       expect(check((await verdictOf(secondProof)).checks, "consistency")?.result).toBe("unknown");
     });
+  });
+});
+
+describe("what a verdict changes (Day 12)", () => {
+  const statusOf = async (id: string) => (await db.select().from(s.requests).where(eq(s.requests.id, id)))[0].status;
+  const milestoneStatus = async () => (await db.select().from(s.milestones).where(eq(s.milestones.id, "m2")))[0].status;
+  const showsCode = fakeVision(({ code }) => sees({ code, itemsSeen: fiftyBags }));
+
+  it("holds the request and its milestone's payments on a Suspicious delivery proof", async () => {
+    const { request, link } = await deliveryWithCode(0);
+    expect(await statusOf(request.id)).toBe("awaiting_proof");
+    await upload(8, link.token, await photo(1), FAR_AWAY, showsCode);
+
+    expect(await statusOf(request.id)).toBe("held");
+    expect(await milestoneStatus()).toBe("in_progress"); // a delivery doesn't change the milestone's own status
+    expect(await milestoneHold(db, "m2")).toEqual({ milestoneHeld: false, heldRequestIds: [request.id] });
+    const [audit] = await verdictAudits();
+    expect(audit.description).toMatch(/Payments for this milestone are held until fresh proof passes\.$/);
+    expect(audit.data).toMatchObject({ requestStatus: { id: request.id, from: "awaiting_proof", to: "held" }, milestoneStatus: null });
+  });
+
+  it("confirms a Verified delivery, and leaves one that needs fresh proof waiting", async () => {
+    const good = await deliveryWithCode(0);
+    await upload(6, good.link.token, await photo(1), ON_SITE, showsCode);
+    expect(await statusOf(good.request.id)).toBe("verified");
+    expect((await verdictAudits())[0].description).toMatch(/The delivery is confirmed\.$/);
+
+    const unread = await deliveryWithCode(60);
+    await upload(66, unread.link.token, await photo(5)); // no vision model: the code is unknown
+    expect(await statusOf(unread.request.id)).toBe("awaiting_proof");
+    expect(await milestoneHold(db, "m2")).toBeNull();
+  });
+
+  it("releases the hold when fresh proof for the same delivery passes", async () => {
+    const { request, payment, link } = await deliveryWithCode(0);
+    await upload(8, link.token, await photo(1), FAR_AWAY, showsCode);
+    expect(await statusOf(request.id)).toBe("held");
+
+    const fresh = await issueProofRequest({ db, now: at(30) }, {
+      projectId: DEMO.projectId, milestoneId: "m2", paymentId: payment.id, contactId: DEMO.contactIds.peter, purpose: "delivery",
+    });
+    await upload(35, fresh.token, await photo(5), ON_SITE, showsCode);
+    expect(await statusOf(request.id)).toBe("verified");
+    expect(await milestoneHold(db, "m2")).toBeNull();
+  });
+
+  it("holds a milestone awaiting proof on a Suspicious progress photo", async () => {
+    await db.update(s.milestones).set({ status: "awaiting_proof" }).where(eq(s.milestones.id, "m2"));
+    const code = await issueProofRequest({ db, now: at(0) }, {
+      projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter, purpose: "progress",
+    });
+    await upload(8, code.token, await photo(1), FAR_AWAY, fakeVision(({ code }) => sees({ code })));
+    expect(await milestoneStatus()).toBe("held");
+    expect(await milestoneHold(db, "m2")).toEqual({ milestoneHeld: true, heldRequestIds: [] });
+    expect((await verdictAudits())[0].data).toMatchObject({ milestoneStatus: { id: "m2", from: "awaiting_proof", to: "held" } });
+  });
+
+  it("doesn't move a milestone that isn't waiting for proof", async () => {
+    const code = await issueProofRequest({ db, now: at(0) }, {
+      projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter, purpose: "progress",
+    });
+    await upload(5, code.token, await photo(1), FAR_AWAY, fakeVision(({ code }) => sees({ code })));
+    expect(await milestoneStatus()).toBe("in_progress");
+    expect((await verdictAudits())[0].data).toMatchObject({ outcome: "suspicious", milestoneStatus: null });
   });
 });
 

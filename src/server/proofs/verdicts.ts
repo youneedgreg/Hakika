@@ -2,14 +2,15 @@
 //
 // The photo is inspected by the vision model once, before the proof's row is locked (a model call
 // takes seconds), and the answer is stored with the verdict. A recheck (a WhatsApp location pin
-// arriving after the photo) reuses it. An overridden verdict is final. Nothing here moves a
-// request, milestone or payment yet; holds and fresh-proof requests act on the outcome.
+// arriving after the photo) reuses it. An overridden verdict is final. The outcome moves the
+// proven request or milestone (holds.ts); fresh-proof requests come on Day 13.
 
 import { and, desc, eq, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { type ExpectedItem, MAX_EARLIER_PHOTOS, type ProofInspection, type ProofPhoto } from "@/server/ai/proof-vision";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
 import type { ProofCheck } from "@/shared/types";
+import { applyVerdict, type VerdictEffects } from "./holds";
 import type { ProofDeps } from "./requests";
 import {
   decideOutcome, duplicateCheck, explainOutcome, freshnessCheck, inspectedCodeCheck, locationCheck, type Outcome,
@@ -97,12 +98,13 @@ export async function verifyProof(deps: ProofDeps, proofId: string): Promise<Ver
     const [payment] = request.paymentId
       ? await tx.select({ requestId: s.payments.requestId }).from(s.payments).where(eq(s.payments.id, request.paymentId))
       : [];
+    const effects = await applyVerdict(tx, request, payment?.requestId ?? null, outcome);
     const again = existing ? " again after its location arrived" : "";
     await tx.insert(s.auditEvents).values({
       projectId: proof.projectId,
       kind: "verdict",
       action: existing ? "verdict.rechecked" : "verdict.recorded",
-      description: `Proof photo for code ${request.code} checked${again}: ${OUTCOME_WORDS[outcome]}. ${explanation}`,
+      description: `Proof photo for code ${request.code} checked${again}: ${OUTCOME_WORDS[outcome]}. ${explanation}${effectWords(effects)}`,
       actor: "system",
       requestId: payment?.requestId ?? null,
       paymentId: request.paymentId,
@@ -113,6 +115,8 @@ export async function verifyProof(deps: ProofDeps, proofId: string): Promise<Ver
         previousOutcome: existing?.outcome ?? null,
         inspection: inspection?.outcome ?? fresh?.failure ?? "not_inspected",
         modelId,
+        requestStatus: effects.request,
+        milestoneStatus: effects.milestone,
         checks: Object.fromEntries(checks.map((c) => [c.name, c.result])),
       },
     });
@@ -166,6 +170,14 @@ async function earlierSitePhotos(db: Reader, proof: typeof s.proofs.$inferSelect
     ))
     .orderBy(desc(s.proofs.receivedAt)).limit(MAX_EARLIER_PHOTOS);
   return rows.map((r) => r.blobPath);
+}
+
+// Fixed words for what the verdict changed, added to the money-trail row.
+function effectWords(effects: VerdictEffects): string {
+  const changed = effects.request?.to ?? effects.milestone?.to;
+  if (changed === "held") return " Payments for this milestone are held until fresh proof passes.";
+  if (changed === "verified") return effects.request ? " The delivery is confirmed." : " The milestone is verified.";
+  return "";
 }
 
 // A delivery proof should show what was paid for: the paid request's lines.
