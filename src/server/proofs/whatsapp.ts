@@ -9,6 +9,7 @@ import type { MediaFile } from "@/server/whatsapp/media";
 import { renderTemplate } from "@/server/whatsapp/templates";
 import { dHash, UnreadableImage } from "./dhash";
 import { findDeliveryDue, issueProofRequest, openProofRequestFor, recordProof, type ProofDeps } from "./requests";
+import { verifyStoredProof } from "./verdicts";
 
 type Contact = typeof s.siteContacts.$inferSelect;
 
@@ -112,7 +113,9 @@ export async function takeWhatsAppProof(
     dhash: hash,
     capture: pin?.latitude != null && pin.longitude != null ? { lat: pin.latitude, lng: pin.longitude, accuracyM: null } : null,
   });
-  return "problem" in result ? "too_late" : "recorded";
+  if ("problem" in result) return "too_late";
+  await verifyStoredProof(deps, result.proofId);
+  return "recorded";
 }
 
 // A location pin from a contact who sent a WhatsApp proof photo without one in the last few
@@ -133,8 +136,10 @@ export async function attachLocationPin(deps: ProofDeps, contact: Contact, messa
     .orderBy(desc(s.proofs.receivedAt)).limit(1);
   if (!proof) return false;
 
-  await deps.db.update(s.proofs).set({ captureLat: pin.latitude, captureLng: pin.longitude })
-    .where(and(eq(s.proofs.id, proof.id), isNull(s.proofs.captureLat)));
+  const updated = await deps.db.update(s.proofs).set({ captureLat: pin.latitude, captureLng: pin.longitude })
+    .where(and(eq(s.proofs.id, proof.id), isNull(s.proofs.captureLat)))
+    .returning({ id: s.proofs.id });
+  if (!updated.length) return false; // another pin got there first
   await deps.db.insert(s.auditEvents).values({
     projectId: proof.projectId,
     kind: "proof",
@@ -144,5 +149,6 @@ export async function attachLocationPin(deps: ProofDeps, contact: Contact, messa
     proofId: proof.id,
     data: { proofRequestId: proof.proofRequestId, messageId },
   });
+  await verifyStoredProof(deps, proof.id); // the location check can now run
   return true;
 }
