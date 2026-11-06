@@ -1,15 +1,18 @@
-// Day 10: issuing proof codes in answer to a PROOF reply, on an in-memory Postgres with a fake
-// Twilio sender.
+// Day 10: issuing proof codes and the capture upload, on an in-memory Postgres with fake storage
+// and a fake Twilio sender. Photos are made with sharp, so dHash runs for real.
 
 import { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import sharp from "sharp";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
-import { hashToken } from "@/server/proofs/codes";
-import { findByToken, issueProofRequest, recordProof } from "@/server/proofs/requests";
+import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
+import { generateToken, hashToken } from "@/server/proofs/codes";
+import { dHash } from "@/server/proofs/dhash";
+import { captureView, findByToken, issueProofRequest, recordProof } from "@/server/proofs/requests";
 import { findContactById, processInbound, type IntakeDeps } from "@/server/whatsapp/intake";
 import { renderTemplate } from "@/server/whatsapp/templates";
 
@@ -18,6 +21,13 @@ const REAL_PHONE = "+254799999999";
 const LINK_BASE = "https://tryhakika.vercel.app";
 const ISSUED_AT = new Date("2026-11-07T09:00:00Z");
 const minutesLater = (m: number) => () => new Date(ISSUED_AT.getTime() + m * 60_000);
+
+// A 64×48 test photo: a left-to-right gradient, or its mirror image.
+async function photo(mirrored = false) {
+  const raw = Buffer.alloc(64 * 48);
+  for (let y = 0; y < 48; y++) for (let x = 0; x < 64; x++) raw[y * 64 + x] = (mirrored ? 63 - x : x) * 4 + (y % 7);
+  return new Uint8Array(await sharp(raw, { raw: { width: 64, height: 48, channels: 1 } }).jpeg({ quality: 90 }).toBuffer());
+}
 
 async function addPaidDelivery() {
   const [request] = await db.insert(s.requests).values({
@@ -136,5 +146,106 @@ describe("issuing a proof request", () => {
     const deps = intakeFakes();
     await processInbound(deps, await peter(), { ...whatsapp(), kind: "text", text: "PROOF" });
     expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("no_proof_due", "sw"));
+  });
+});
+
+describe("the capture page", () => {
+  async function issued() {
+    const { payment } = await addPaidDelivery();
+    return issueProofRequest({ db, now: minutesLater(0) }, {
+      projectId: DEMO.projectId, milestoneId: "m2", paymentId: payment.id, contactId: DEMO.contactIds.peter, purpose: "delivery",
+    });
+  }
+
+  function captureDeps(minutes: number) {
+    const stored = new Map<string, Uint8Array>();
+    const deps = {
+      db,
+      now: minutesLater(minutes),
+      storeFile: vi.fn(async (path: string, file: { bytes: Uint8Array }) => {
+        stored.set(path, file.bytes);
+        return path;
+      }),
+      deleteFile: vi.fn(async (path: string) => void stored.delete(path)),
+    } satisfies CaptureDeps;
+    return { deps, stored };
+  }
+
+  const upload = async (mirrored = false) => ({
+    image: { bytes: await photo(mirrored), contentType: "image/jpeg" },
+    lat: -0.42016, lng: 36.94771, accuracyM: 12, clientTime: minutesLater(6)(),
+  });
+
+  it("shows the code, the milestone and instructions in both languages", async () => {
+    const link = await issued();
+    const view = await captureView({ db, now: minutesLater(1) }, link.token);
+    expect(view).toEqual({
+      capture: {
+        code: link.code, purpose: "delivery", milestoneName: "Foundation",
+        instructions: { en: expect.any(String), sw: expect.any(String) },
+        expiresAt: minutesLater(30)().toISOString(),
+      },
+    });
+  });
+
+  it("stores the photo with its hash, location and times, and uses up the link", async () => {
+    const link = await issued();
+    const { deps, stored } = captureDeps(7);
+    const result = await submitCaptureProof(deps, link.token, await upload());
+    expect(result).toEqual({ proofId: expect.stringMatching(/^prf_/) });
+    const proofId = (result as { proofId: string }).proofId;
+
+    const [proof] = await db.select().from(s.proofs).where(eq(s.proofs.id, proofId));
+    expect(proof).toMatchObject({
+      proofRequestId: link.id, source: "capture_page", blobPath: `proofs/${proofId}.jpg`, contentType: "image/jpeg",
+      dhash: await dHash(await photo()), captureLat: -0.42016, captureLng: 36.94771, accuracyM: 12,
+      clientTime: minutesLater(6)(), receivedAt: minutesLater(7)(),
+    });
+    expect(stored.has(proof.blobPath)).toBe(true);
+    const [row] = await proofRequestRows();
+    expect(row).toMatchObject({ status: "used", usedAt: minutesLater(7)() });
+    expect(await auditActions()).toEqual(["proof.requested", "proof.received"]);
+
+    // Single use: the same link refuses a second photo without storing it.
+    const again = captureDeps(8);
+    expect(await submitCaptureProof(again.deps, link.token, await upload(true))).toEqual({ problem: "used" });
+    expect(again.deps.storeFile).not.toHaveBeenCalled();
+    expect(await captureView({ db, now: minutesLater(8) }, link.token)).toEqual({ problem: "used" });
+  });
+
+  it("refuses an expired link and marks it expired", async () => {
+    const link = await issued();
+    const { deps } = captureDeps(30);
+    expect(await submitCaptureProof(deps, link.token, await upload())).toEqual({ problem: "expired" });
+    expect(deps.storeFile).not.toHaveBeenCalled();
+    expect((await proofRequestRows())[0].status).toBe("expired");
+  });
+
+  it("deletes the stored photo when the link was used during the upload", async () => {
+    const link = await issued();
+    const { deps, stored } = captureDeps(7);
+    deps.storeFile.mockImplementationOnce(async (path, file) => {
+      // Another upload wins while this one is being stored.
+      await recordProof({ db, now: minutesLater(7) }, link.id, {
+        proofId: "prf_other", source: "capture_page", blobPath: "proofs/prf_other.jpg", contentType: "image/jpeg",
+        sizeBytes: 10, dhash: "0123456789abcdef", capture: { lat: 0, lng: 0, accuracyM: 5 },
+      });
+      stored.set(path, file.bytes);
+      return path;
+    });
+    expect(await submitCaptureProof(deps, link.token, await upload())).toEqual({ problem: "used" });
+    expect(deps.deleteFile).toHaveBeenCalledOnce();
+    expect(stored.size).toBe(0);
+    expect(await db.select().from(s.proofs)).toHaveLength(1);
+  });
+
+  it("refuses a file that isn't a readable image, and unknown or malformed tokens", async () => {
+    const link = await issued();
+    const { deps } = captureDeps(5);
+    const bad = { ...(await upload()), image: { bytes: new Uint8Array([1, 2, 3]), contentType: "image/jpeg" } };
+    expect(await submitCaptureProof(deps, link.token, bad)).toEqual({ problem: "unreadable_image" });
+    expect(deps.storeFile).not.toHaveBeenCalled();
+    expect(await captureView({ db }, generateToken())).toEqual({ problem: "not_found" });
+    expect(await captureView({ db }, "guess")).toEqual({ problem: "not_found" });
   });
 });

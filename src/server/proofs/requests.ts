@@ -5,6 +5,7 @@
 // engine's job (Day 11), so nothing in this file moves a request or milestone past awaiting_proof.
 
 import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import type { ProofCapture } from "@/shared/api";
 import type { AnyDb } from "@/server/db/client";
 import type { PROOF_PURPOSES, PROOF_SOURCES } from "@/server/db/enums";
 import { newId } from "@/server/db/ids";
@@ -161,6 +162,34 @@ export async function findByToken(
     return { problem: "expired" };
   }
   return { request };
+}
+
+const INSTRUCTIONS: Record<Purpose, ProofCapture["instructions"]> = {
+  delivery: {
+    en: "Write this code on paper or on the delivered goods. Take one photo at the site that shows the code and the delivery.",
+    sw: "Andika nambari hii kwenye karatasi au kwenye mzigo uliofika. Piga picha moja ukiwa eneo la ujenzi inayoonyesha nambari na mzigo.",
+  },
+  progress: {
+    en: "Write this code on paper. Take one photo at the site that shows the code and the finished work.",
+    sw: "Andika nambari hii kwenye karatasi. Piga picha moja ukiwa eneo la ujenzi inayoonyesha nambari na kazi iliyokamilika.",
+  },
+};
+
+// What the phone capture page shows for a link.
+export async function captureView(deps: ProofDeps, token: string): Promise<{ capture: ProofCapture } | { problem: LinkProblem }> {
+  const found = await findByToken(deps, token);
+  if ("problem" in found) return found;
+  const { request } = found;
+  const [milestone] = await deps.db.select({ name: s.milestones.name }).from(s.milestones).where(eq(s.milestones.id, request.milestoneId));
+  return {
+    capture: {
+      code: request.code,
+      purpose: request.purpose,
+      milestoneName: milestone.name,
+      instructions: INSTRUCTIONS[request.purpose],
+      expiresAt: request.expiresAt.toISOString(),
+    },
+  };
 }
 
 export type ProofInput = {
