@@ -6,6 +6,8 @@ import { eq } from "drizzle-orm";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
+import { isProofKeyword } from "@/server/proofs/codes";
+import { answerProofKeyword } from "@/server/proofs/whatsapp";
 import type { MediaFile } from "./media";
 import { renderTemplate, type PlainTemplateKey } from "./templates";
 
@@ -88,6 +90,12 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
       console.error("WhatsApp media was not saved:", describeError(error));
       template = "needs_info";
     }
+  }
+
+  // A PROOF reply never reaches the reading models: it is matched in code.
+  if (!message.unsupported && message.kind === "text" && isProofKeyword(message.text)) {
+    await answerProofKeyword(deps, contact, message);
+    return stored.id;
   }
 
   await replyWithTemplate(deps, contact, message, template);
