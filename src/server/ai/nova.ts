@@ -17,6 +17,18 @@ export function novaModel(): LanguageModel {
   return createAmazonBedrock({ region, accessKeyId, secretAccessKey })(modelId);
 }
 
+// The photo formats Nova is sent.
+export const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+// Words a quote or a proof photo has no use for. In testing, Nova obeyed text like this in a photo
+// despite being told not to, changing the supplier and a price, so a match means nothing it read
+// from that photo is used.
+const INSTRUCTION_LIKE = /\b(ignore|disregard|instructions?|system|prompt|assistant|override|puuza|maelekezo)\b|\bAI\b|\bset\s+\w+\s+to\b/i;
+
+export function looksLikeInstructions(text: string): boolean {
+  return INSTRUCTION_LIKE.test(text);
+}
+
 // The items Hakika has a reference for. The model picks from these; code checks that it did.
 export type CatalogItem = { itemKey: string; description: string; unit: string };
 
