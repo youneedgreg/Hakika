@@ -14,6 +14,7 @@ import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
 import { issueProofRequest } from "@/server/proofs/requests";
+import { isWellFormedProofId, loadProofReview, proofImageResponse } from "@/server/proofs/review";
 import { verifyProof, verifyStoredProof } from "@/server/proofs/verdicts";
 import { findContactById, processInbound, type IntakeDeps } from "@/server/whatsapp/intake";
 
@@ -223,5 +224,59 @@ describe("verdicts for WhatsApp proofs", () => {
     const verdict = await verdictOf(proof.id);
     expect(check(verdict.checks, "location")?.result).toBe("fail");
     expect(verdict.outcome).toBe("suspicious");
+  });
+});
+
+describe("the proof review and photo", () => {
+  it("serves the stored verdict with the site, the capture point and the photo's URL", async () => {
+    const { link } = await deliveryWithCode(0);
+    const proofId = await upload(6, link.token, await photo(1));
+    const review = await loadProofReview({ db }, proofId);
+    const verdict = await verdictOf(proofId);
+    expect(review).toEqual({
+      proofId,
+      imageUrl: `/api/proofs/${proofId}/image`,
+      receivedAt: at(6)().toISOString(),
+      capture: { lat: ON_SITE.lat, lng: ON_SITE.lng, accuracyM: 12 },
+      site: { lat: -0.4201, lng: 36.9476, radiusM: 150 },
+      checks: verdict.checks,
+      outcome: "needs_fresh_proof",
+      explanation: verdict.explanation,
+    });
+    expect(await loadProofReview({ db }, "prf_AAAAAAAAAAAAAAAA")).toBeNull();
+  });
+
+  it("checks a proof whose verdict is missing, once, when it's first opened", async () => {
+    const { link } = await deliveryWithCode(0);
+    const proofId = await upload(6, link.token, await photo(1));
+    await db.delete(s.verdicts);
+    expect((await loadProofReview({ db }, proofId))?.outcome).toBe("needs_fresh_proof");
+    await loadProofReview({ db }, proofId);
+    expect(await db.select().from(s.verdicts)).toHaveLength(1);
+  });
+
+  it("streams the photo privately, with the stored content type", async () => {
+    const { link } = await deliveryWithCode(0);
+    const bytes = await photo(1);
+    const proofId = await upload(6, link.token, bytes);
+    const [proof] = await db.select().from(s.proofs);
+    const read = vi.fn(async () => new Blob([Buffer.from(bytes)]).stream());
+
+    const response = await proofImageResponse(db, proofId, read);
+    expect(read).toHaveBeenCalledWith(proof.blobPath);
+    expect(response?.headers.get("content-type")).toBe("image/jpeg");
+    expect(response?.headers.get("cache-control")).toBe("private, no-store");
+    expect(response?.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(new Uint8Array(await response!.arrayBuffer())).toEqual(bytes);
+
+    expect(await proofImageResponse(db, proofId, async () => null)).toBeNull(); // gone from storage
+    expect(await proofImageResponse(db, "prf_AAAAAAAAAAAAAAAA", read)).toBeNull();
+  });
+
+  it("knows a proof ID's shape", () => {
+    expect(isWellFormedProofId("prf_AAAAAAAAAAAAAAAA")).toBe(true);
+    for (const id of ["prf_short", "prq_AAAAAAAAAAAAAAAA", "prf_AAAAAAAAAAAAAAA/", "proof-cement-delivery"]) {
+      expect(isWellFormedProofId(id)).toBe(false);
+    }
   });
 });
