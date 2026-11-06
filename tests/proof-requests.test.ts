@@ -1,8 +1,8 @@
-// Day 10: issuing proof codes and the capture upload, on an in-memory Postgres with fake storage
-// and a fake Twilio sender. Photos are made with sharp, so dHash runs for real.
+// Day 10: issuing proof codes, the capture upload and the WhatsApp fallback, on an in-memory Postgres
+// with fake storage and a fake Twilio sender. Photos are made with sharp, so dHash runs for real.
 
 import { PGlite } from "@electric-sql/pglite";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import sharp from "sharp";
@@ -247,5 +247,69 @@ describe("the capture page", () => {
     expect(deps.storeFile).not.toHaveBeenCalled();
     expect(await captureView({ db }, generateToken())).toEqual({ problem: "not_found" });
     expect(await captureView({ db }, "guess")).toEqual({ problem: "not_found" });
+  });
+});
+
+describe("the WhatsApp fallback", () => {
+  async function askForCode(deps: ReturnType<typeof intakeFakes>) {
+    await addPaidDelivery();
+    await processInbound(deps, await peter(), { ...whatsapp(), kind: "text", text: "PROOF" });
+  }
+  const image = () => ({ ...whatsapp(), kind: "image" as const, media: { url: "https://api.twilio.com/m" } });
+  const pin = () => ({ ...whatsapp(), kind: "location" as const, location: { lat: -0.4202, lng: 36.9477 } });
+
+  it("takes a photo sent while the code is open as the proof, then adds a pin shared after it", async () => {
+    const deps = intakeFakes();
+    await askForCode(deps);
+    deps.loadMedia.mockResolvedValue({ bytes: await photo(), contentType: "image/jpeg", extension: "jpg" });
+
+    const messageId = await processInbound(deps, await peter(), image());
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("proof_photo_received", "sw"));
+    expect(deps.afterReply).not.toHaveBeenCalled(); // not read as a quote
+    const [proof] = await db.select().from(s.proofs);
+    expect(proof).toMatchObject({ source: "whatsapp", blobPath: `whatsapp/${messageId}.jpg`, captureLat: null });
+    expect((await proofRequestRows())[0].status).toBe("used");
+
+    await processInbound(deps, await peter(), pin());
+    const [located] = await db.select().from(s.proofs);
+    expect(located).toMatchObject({ captureLat: -0.4202, captureLng: 36.9477, accuracyM: null });
+    expect(await auditActions()).toEqual(["proof.requested", "proof.received", "proof.location_added"]);
+  });
+
+  it("uses a pin shared just before the photo", async () => {
+    const deps = intakeFakes();
+    await askForCode(deps);
+    await processInbound(deps, await peter(), pin());
+    deps.loadMedia.mockResolvedValue({ bytes: await photo(), contentType: "image/jpeg", extension: "jpg" });
+    await processInbound(deps, await peter(), image());
+    const [proof] = await db.select().from(s.proofs);
+    expect(proof).toMatchObject({ source: "whatsapp", captureLat: -0.4202, captureLng: 36.9477 });
+  });
+
+  it("reads a photo as a quote when there is no open code", async () => {
+    const deps = intakeFakes();
+    deps.loadMedia.mockResolvedValue({ bytes: await photo(), contentType: "image/jpeg", extension: "jpg" });
+    await processInbound(deps, await peter(), image());
+    expect(deps.afterReply).toHaveBeenCalledOnce();
+    expect(await db.select().from(s.proofs)).toHaveLength(0);
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("request_received", "sw"));
+  });
+
+  it("asks again when the photo can't be read, and keeps the code open", async () => {
+    const deps = intakeFakes();
+    await askForCode(deps);
+    deps.loadMedia.mockResolvedValue({ bytes: new Uint8Array([1, 2, 3]), contentType: "image/jpeg", extension: "jpg" });
+    await processInbound(deps, await peter(), image());
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("needs_info", "sw"));
+    expect(await db.select().from(s.proofs)).toHaveLength(0);
+    expect(await db.select().from(s.proofRequests).where(and(eq(s.proofRequests.status, "issued")))).toHaveLength(1);
+  });
+
+  it("doesn't let another contact's photo answer the foreman's code", async () => {
+    const deps = intakeFakes();
+    await askForCode(deps);
+    deps.loadMedia.mockResolvedValue({ bytes: await photo(), contentType: "image/jpeg", extension: "jpg" });
+    await processInbound(deps, await grace(), image());
+    expect(await db.select().from(s.proofs)).toHaveLength(0);
   });
 });

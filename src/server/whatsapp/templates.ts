@@ -38,6 +38,11 @@ const TEMPLATES = {
     en: "Hakika: your proof code for {milestone} is {code}. Write it on paper or on the delivered goods, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
     sw: "Hakika: nambari yako ya uthibitisho kwa {milestone} ni {code}. Iandike kwenye karatasi au kwenye mzigo uliofika, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa, kisha tuma mahali ulipo (location).",
   },
+  // A proof photo sent in the chat (for people who can't open the link).
+  proof_photo_received: {
+    en: "Hakika: we received your proof photo. If you have not shared your location yet, share it now.",
+    sw: "Hakika: tumepokea picha yako ya uthibitisho. Kama bado hujatuma mahali ulipo (location), itume sasa.",
+  },
   // A PROOF reply when nothing is waiting for proof.
   no_proof_due: {
     en: "Hakika: there is no delivery waiting for proof right now.",
