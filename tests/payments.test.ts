@@ -4,7 +4,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
@@ -229,6 +229,18 @@ describe("capturing after the owner approves", () => {
     const [payment] = await paymentsFor(request.id);
     expect(payment).toMatchObject({ status: "captured", paypalCaptureId: `CAP-${orderId}`, capturedAt: new Date("2026-11-03T12:00:00Z") });
     expect(await actions(request.id)).toEqual(["payment.order_created", "payment.captured"]);
+  });
+
+  it("names the supplier in the money trail, not its PayPal email", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+
+    const [captured] = await db.select().from(s.auditEvents)
+      .where(and(eq(s.auditEvents.requestId, request.id), eq(s.auditEvents.action, "payment.captured")));
+    expect(captured.description).toMatch(/^USD \d+\.\d{2} was paid through PayPal to Mlima Hardware\.$/);
+    expect(captured.description).not.toContain(MLIMA_EMAIL);
   });
 
   it("answers a repeated capture from the database without paying again", async () => {

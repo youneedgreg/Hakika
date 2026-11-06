@@ -204,7 +204,7 @@ async function applyCapture(
     }).where(eq(s.payments.id, payment.id));
     await tx.update(s.requests).set({ status }).where(eq(s.requests.id, request.id));
     await audit(tx, request, payment, ownerActor, "payment.captured",
-      `USD ${centsToAmount(payment.amountUsdCents)} was paid through PayPal to ${payment.payeeEmail}.`,
+      `USD ${centsToAmount(payment.amountUsdCents)} was paid through PayPal to ${await payeeName(tx, payment)}.`,
       capture.id, capture.amount && { captured: capture.amount });
     return ok({ requestId: request.id, status, captureId: capture.id });
   }
@@ -230,6 +230,13 @@ async function applyCapture(
   }
 
   throw new Error(`A new capture can't be ${capture.status}.`);
+}
+
+// The money trail names the supplier, never its PayPal email.
+async function payeeName(tx: AnyDb, payment: Payment): Promise<string> {
+  if (!payment.payeeSupplierId) return "the supplier";
+  const [supplier] = await tx.select({ name: s.suppliers.name }).from(s.suppliers).where(eq(s.suppliers.id, payment.payeeSupplierId));
+  return supplier?.name ?? "the supplier";
 }
 
 async function ownerOf(tx: AnyDb, projectId: string): Promise<string> {
