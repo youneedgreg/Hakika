@@ -10,6 +10,7 @@ import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { captureOrderForRequest, createOrderForRequest, type PaymentDeps } from "@/server/payments/orders";
 import { PayPalApiError, type PayPalClient, type PayPalOrder } from "@/server/payments/paypal";
+import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -60,6 +61,12 @@ function fakeSandbox() {
     },
   };
 
+  const setCaptureStatus = (orderId: string, status: string) => {
+    const stored = orders.get(orderId)!;
+    const [unit] = stored.order.purchase_units!;
+    unit.payments!.captures![0] = { ...unit.payments!.captures![0], status: status as "REFUNDED" };
+  };
+
   return {
     paypal,
     orders,
@@ -78,6 +85,8 @@ function fakeSandbox() {
       const stored = orders.get(orderId)!;
       stored.order = capturedOrder(stored, "COMPLETED");
     },
+    refund: (orderId: string, part: "full" | "partial" = "full") =>
+      setCaptureStatus(orderId, part === "full" ? "REFUNDED" : "PARTIALLY_REFUNDED"),
     captureWill: (status: typeof nextCaptureStatus) => { nextCaptureStatus = status; },
     loseNextCaptureAnswer: () => { loseNextCaptureAnswer = true; },
   };
@@ -125,6 +134,7 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
+  await db.delete(s.webhookEvents);
   await db.delete(s.auditEvents);
   await db.delete(s.payments);
   await db.delete(s.findings);
@@ -335,5 +345,126 @@ describe("capturing after the owner approves", () => {
 
   it("404s an order Hakika didn't create", async () => {
     expect(await captureOrderForRequest(db, "SOMEONE-ELSES", deps())).toMatchObject({ ok: false, httpStatus: 404 });
+  });
+});
+
+describe("PayPal webhook events (after the signature check)", () => {
+  let eventCount = 0;
+  const captureEvent = (type: string, orderId: string, captureId = `CAP-${orderId}`): PayPalEvent => ({
+    id: `WH-${++eventCount}`,
+    event_type: type,
+    resource: { id: captureId, supplementary_data: { related_ids: { order_id: orderId } } },
+  });
+  const refundEvent = (captureId: string, type = "PAYMENT.CAPTURE.REFUNDED"): PayPalEvent => ({
+    id: `WH-${++eventCount}`,
+    event_type: type,
+    resource: {
+      id: "REFUND-1",
+      links: [
+        { rel: "self", href: "https://api.sandbox.paypal.com/v2/payments/refunds/REFUND-1" },
+        { rel: "up", href: `https://api.sandbox.paypal.com/v2/payments/captures/${captureId}` },
+      ],
+    },
+  });
+  const handle = (event: PayPalEvent) => handlePayPalEvent(db, event, deps());
+
+  async function paidRequest() {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+    return { request, orderId };
+  }
+
+  it("confirms a capture the server already recorded, once, and ignores a repeated delivery", async () => {
+    const { request, orderId } = await paidRequest();
+    const event = captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId);
+
+    expect(await handle(event)).toBe("confirmed");
+    expect(await handle(event)).toBe("duplicate");
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("no_change");
+    expect(await actions(request.id)).toEqual(["payment.order_created", "payment.captured", "payment.webhook_confirmed"]);
+    expect(sandbox.counts.capture).toBe(1);
+    const [stored] = await db.select().from(s.webhookEvents).where(eq(s.webhookEvents.eventId, event.id));
+    expect(stored).toMatchObject({ provider: "paypal", type: "PAYMENT.CAPTURE.COMPLETED" });
+    expect(stored.processedAt).not.toBeNull();
+  });
+
+  it("finishes a pending capture when PayPal completes it, without capturing again", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.captureWill("PENDING");
+    await captureOrderForRequest(db, orderId, deps());
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.PENDING", orderId))).toBe("no_change");
+
+    sandbox.completeLater(orderId);
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("recorded");
+    expect(await requestStatus(request.id)).toBe("paid");
+    expect(sandbox.counts.capture).toBe(1);
+    const [captured] = await db.select().from(s.auditEvents).where(and(
+      eq(s.auditEvents.requestId, request.id), eq(s.auditEvents.action, "payment.captured"),
+    ));
+    expect(captured.data).toMatchObject({ via: "paypal_webhook", eventType: "PAYMENT.CAPTURE.COMPLETED" });
+  });
+
+  it("never captures: an approved order PayPal hasn't captured stays unpaid", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("no_change");
+    expect(sandbox.counts.capture).toBe(0);
+    expect(await requestStatus(request.id)).toBe("awaiting_approval");
+  });
+
+  it("records a full refund on the payment and leaves the request's status alone", async () => {
+    const { request, orderId } = await paidRequest();
+    sandbox.refund(orderId);
+
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("refunded");
+    expect((await paymentsFor(request.id))[0].status).toBe("refunded");
+    expect(await requestStatus(request.id)).toBe("paid");
+    expect(await actions(request.id)).toContain("payment.refunded");
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("no_change");
+  });
+
+  it("notes a partial refund in the money trail but keeps the payment captured", async () => {
+    const { request, orderId } = await paidRequest();
+    sandbox.refund(orderId, "partial");
+
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("partially_refunded");
+    expect((await paymentsFor(request.id))[0].status).toBe("captured");
+    expect(await actions(request.id)).toContain("payment.partially_refunded");
+  });
+
+  it("flags a capture PayPal reports for a request that wasn't waiting to be paid", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.completeLater(orderId);
+    await db.update(s.requests).set({ status: "declined" }).where(eq(s.requests.id, request.id));
+
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("unexpected");
+    expect(await requestStatus(request.id)).toBe("declined");
+    expect(await actions(request.id)).toContain("payment.capture_unexpected");
+  });
+
+  it("ignores orders Hakika didn't make and event types it doesn't read, and stores both", async () => {
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", "SOMEONE-ELSES"))).toBe("unknown_order");
+    expect(await handle({ id: "WH-other", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "X" } })).toBe("ignored");
+    expect(await handle(refundEvent("NOT-OUR-CAPTURE"))).toBe("ignored");
+    expect(await db.select().from(s.webhookEvents)).toHaveLength(3);
+  });
+
+  it("runs an event again when PayPal retries one that failed half-way", async () => {
+    const { orderId } = await paidRequest();
+    const event = captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId);
+    const getOrder = sandbox.paypal.getOrder;
+    sandbox.paypal.getOrder = async () => { throw new Error("socket hang up"); };
+
+    await expect(handle(event)).rejects.toThrow("socket hang up");
+    sandbox.paypal.getOrder = getOrder;
+    expect(await handle(event)).toBe("confirmed");
   });
 });

@@ -185,6 +185,74 @@ export async function captureOrderForRequest(
   });
 }
 
+export type WebhookSource = { eventId: string; eventType: string };
+
+export type SyncResult =
+  | "recorded" // a capture outcome this server hadn't recorded yet
+  | "confirmed" // the webhook agrees with a capture already recorded
+  | "refunded"
+  | "partially_refunded"
+  | "unexpected" // PayPal reports a capture for a request that wasn't waiting for one
+  | "no_change"
+  | "unknown_order"; // not an order Hakika made
+
+// What a verified PayPal webhook does: read the order back from PayPal and record what changed.
+// It never captures. Money moves only when the owner approves and the capture route runs; the
+// webhook is the second check the roadmap asks for, and it finishes captures that were PENDING.
+export async function syncPaymentFromPayPal(
+  db: AnyDb,
+  orderId: string,
+  deps: PaymentDeps,
+  source: WebhookSource,
+): Promise<SyncResult> {
+  return db.transaction(async (tx) => {
+    const [found] = await tx.select().from(s.payments).where(eq(s.payments.paypalOrderId, orderId));
+    if (!found?.requestId) return "unknown_order";
+    const [request] = await tx.select().from(s.requests).where(eq(s.requests.id, found.requestId)).for("update");
+    const [payment] = await tx.select().from(s.payments).where(eq(s.payments.id, found.id));
+    const order = await deps.paypal.getOrder(orderId);
+    const capture = order && captureOf(order);
+    if (!capture) return "no_change";
+    const data = { via: "paypal_webhook", eventId: source.eventId, eventType: source.eventType };
+
+    if (payment.status === "created") {
+      if (capture.status === "PENDING" && payment.paypalCaptureId === capture.id) return "no_change";
+      if (!["COMPLETED", "PENDING", "DECLINED", "FAILED"].includes(capture.status)) return "no_change";
+      if (request.status !== "awaiting_approval" && request.status !== "approved") {
+        await audit(tx, request, payment, "system", "payment.capture_unexpected",
+          `PayPal reports a ${capture.status.toLowerCase()} payment for a request that is ${request.status.replaceAll("_", " ")}. Check it in PayPal.`,
+          capture.id, data);
+        return "unexpected";
+      }
+      await applyCapture(tx, request, payment, capture, await ownerOf(tx, request.projectId), deps, data);
+      return "recorded";
+    }
+
+    if (payment.status !== "captured") return "no_change";
+    const paid = `USD ${centsToAmount(payment.amountUsdCents)} paid to ${await payeeName(tx, payment)}`;
+    if (capture.status === "REFUNDED") {
+      await tx.update(s.payments).set({ status: paymentMachine.transition(payment.status, "refunded") }).where(eq(s.payments.id, payment.id));
+      await audit(tx, request, payment, "system", "payment.refunded", `The ${paid} was refunded through PayPal.`, capture.id, data);
+      return "refunded";
+    }
+    if (capture.status === "PARTIALLY_REFUNDED") {
+      await audit(tx, request, payment, "system", "payment.partially_refunded",
+        `Part of the ${paid} was refunded through PayPal.`, capture.id, data);
+      return "partially_refunded";
+    }
+    if (capture.status === "COMPLETED" && source.eventType === "PAYMENT.CAPTURE.COMPLETED") {
+      const [already] = await tx.select({ id: s.auditEvents.id }).from(s.auditEvents).where(and(
+        eq(s.auditEvents.paymentId, payment.id), eq(s.auditEvents.action, "payment.webhook_confirmed"),
+      ));
+      if (already) return "no_change";
+      await audit(tx, request, payment, "system", "payment.webhook_confirmed",
+        "PayPal's signed webhook confirmed this payment.", capture.id, data);
+      return "confirmed";
+    }
+    return "no_change";
+  });
+}
+
 // Records what PayPal says happened to a capture. Only COMPLETED marks the request paid.
 async function applyCapture(
   tx: AnyDb,
@@ -193,6 +261,7 @@ async function applyCapture(
   capture: PayPalCapture,
   ownerActor: string,
   deps: PaymentDeps,
+  extra?: object,
 ): Promise<PaymentOutcome<CaptureResult>> {
   const approved = request.status === "approved" ? request.status : requestMachine.transition(request.status, "owner_approved");
   const ids = { paypalCaptureId: capture.id };
@@ -203,9 +272,10 @@ async function applyCapture(
       ...ids, status: paymentMachine.transition(payment.status, "captured"), capturedAt: (deps.now ?? (() => new Date()))(),
     }).where(eq(s.payments.id, payment.id));
     await tx.update(s.requests).set({ status }).where(eq(s.requests.id, request.id));
+    const data = capture.amount || extra ? { ...(capture.amount && { captured: capture.amount }), ...extra } : undefined;
     await audit(tx, request, payment, ownerActor, "payment.captured",
       `USD ${centsToAmount(payment.amountUsdCents)} was paid through PayPal to ${await payeeName(tx, payment)}.`,
-      capture.id, capture.amount && { captured: capture.amount });
+      capture.id, data);
     return ok({ requestId: request.id, status, captureId: capture.id });
   }
 
@@ -215,7 +285,7 @@ async function applyCapture(
     await tx.update(s.payments).set(ids).where(eq(s.payments.id, payment.id));
     await tx.update(s.requests).set({ status: approved }).where(eq(s.requests.id, request.id));
     await audit(tx, request, payment, ownerActor, "payment.capture_pending",
-      "PayPal accepted the payment but hasn't credited the supplier yet.", capture.id);
+      "PayPal accepted the payment but hasn't credited the supplier yet.", capture.id, extra);
     return ok({ requestId: request.id, status: approved, captureId: capture.id });
   }
 
@@ -225,7 +295,7 @@ async function applyCapture(
     await tx.update(s.payments).set({ ...ids, status: paymentMachine.transition(payment.status, event) }).where(eq(s.payments.id, payment.id));
     await tx.update(s.requests).set({ status }).where(eq(s.requests.id, request.id));
     await audit(tx, request, payment, ownerActor, "payment.capture_declined",
-      "PayPal declined the payment. Nothing was paid, and the request is waiting for approval again.", capture.id);
+      "PayPal declined the payment. Nothing was paid, and the request is waiting for approval again.", capture.id, extra);
     return fail(402, "capture_declined", "PayPal declined the payment. Nothing was paid; the owner can try again.");
   }
 

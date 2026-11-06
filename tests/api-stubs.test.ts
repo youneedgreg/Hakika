@@ -200,8 +200,30 @@ describe("ledger, agent and Judge Mode routes", () => {
   });
 });
 
-describe("webhooks", () => {
-  it("answer 501 until they are built", async () => {
-    expect((await paypalWebhook()).status).toBe(501);
+describe("the PayPal webhook", () => {
+  const event = { id: "WH-1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: {} };
+
+  it("answers 503 until PayPal and the webhook ID are set", async () => {
+    vi.stubEnv("PAYPAL_ENV", "sandbox");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "id");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    const res = await paypalWebhook(post("/api/webhooks/paypal", event));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe("paypal_webhook_not_configured");
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses a delivery without PayPal's signature headers, before asking PayPal anything", async () => {
+    vi.stubEnv("PAYPAL_ENV", "sandbox");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "id");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WH-ID");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const res = await paypalWebhook(post("/api/webhooks/paypal", event));
+    expect(res.status).toBe(401);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 });
