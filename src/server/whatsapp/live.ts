@@ -6,6 +6,7 @@ import { parseMessage } from "@/server/ai/parse-message";
 import { readQuote } from "@/server/ai/quote";
 import { translateVoiceNote } from "@/server/ai/translate";
 import { getDb } from "@/server/db/client";
+import { liveProofVision } from "@/server/proofs/live";
 import { runRequestPipeline } from "@/server/requests/pipeline";
 import type { IntakeDeps } from "./intake";
 import { fetchOwnMedia, type MediaFile } from "./media";
@@ -22,6 +23,7 @@ export function twilioDeps(): IntakeDeps {
     loadMedia: fetchTwilioMedia,
     storeMedia,
     send: sendWhatsApp,
+    vision: liveProofVision(),
     afterReply: (stored) => runRequestPipeline(deps, { translate: translateVoiceNote, readQuote, parseMessage, explainFindings }, stored),
   };
   return deps;

@@ -1,10 +1,11 @@
 // The verification engine's fixed checks and outcome rule. Pure functions: no database, no model.
 //
 // Hard checks (a fail means Suspicious): the code, freshness, duplicate photo and location.
-// Soft checks (a fail or unknown means Needs fresh proof): what the vision model sees. Until the
-// model reads proofs, the code and the soft checks are "unknown", so no proof is Verified yet.
-// The outcome is decided here, in code; a model's output is only ever one input to a check.
+// Soft checks (a fail or unknown means Needs fresh proof): what the vision model sees. The code is
+// read by the model but compared here. The outcome is decided here, in code; a model's output is
+// only ever one input to a check.
 
+import type { ExpectedItem, ProofInspection, ProofReading } from "@/server/ai/proof-vision";
 import type { ProofCheck, ProofReview } from "@/shared/types";
 import { PROOF_LINK_TTL_MS } from "./codes";
 import { hammingDistance } from "./dhash";
@@ -89,14 +90,84 @@ export function accuracyCredit(accuracyM: number | null): number {
   return Math.round(Math.min(accuracyM, MAX_ACCURACY_CREDIT_M));
 }
 
-// The vision checks, before the model has looked at the photo.
-export function notInspectedChecks(): ProofCheck[] {
-  const detail = "Not inspected yet.";
+// What the code check is given from the vision model's inspection. A distrusted or failed
+// inspection is "unknown", never a fail: no code read is not the same as no code written.
+export function inspectedCodeCheck(issued: string, inspection: ProofInspection | null): ProofCheck {
+  if (inspection?.outcome === "inspected") return codeCheck(issued, inspection.reading.code);
+  if (inspection?.outcome === "distrusted") {
+    return { name: "code", hard: true, result: "unknown", detail: DISTRUSTED };
+  }
+  return codeCheck(issued, undefined);
+}
+
+// A delivery photo should show at least this share of each item paid for. Counting stacked bags in
+// a photo is rough, so this only catches a delivery that is clearly short.
+export const MIN_SHARE_SEEN = 0.5;
+
+const DISTRUSTED = "Text in the photo reads like instructions to the AI, so nothing read from it was used.";
+
+export type VisionContext = { purpose: "delivery" | "progress"; expected: ExpectedItem[] };
+
+// The soft checks that apply: screen or print always; the items paid for on a delivery; the site's
+// look on a progress photo. Each result is decided here from what the model reported.
+export function visionChecks(inspection: ProofInspection | null, ctx: VisionContext): ProofCheck[] {
+  const names: ProofCheck["name"][] = ["screen_or_print", ctx.purpose === "delivery" ? "expected_items" : "consistency"];
+  if (!inspection || inspection.outcome === "unreadable") {
+    const detail = inspection ? "The photo couldn't be inspected." : "Not inspected yet.";
+    return names.map((name) => ({ name, result: "unknown", hard: false, detail }));
+  }
+  if (inspection.outcome === "distrusted") {
+    return names.map((name) => ({ name, result: "fail", hard: false, detail: DISTRUSTED }));
+  }
+  const { reading } = inspection;
   return [
-    { name: "screen_or_print", result: "unknown", hard: false, detail },
-    { name: "expected_items", result: "unknown", hard: false, detail },
-    { name: "consistency", result: "unknown", hard: false, detail },
+    screenOrPrintCheck(reading),
+    ctx.purpose === "delivery" ? expectedItemsCheck(reading, ctx.expected) : consistencyCheck(reading),
   ];
+}
+
+function screenOrPrintCheck(reading: ProofReading): ProofCheck {
+  const base = { name: "screen_or_print", hard: false } as const;
+  if (reading.medium === "screen") return { ...base, result: "fail", detail: "Looks like a photo of a screen, not of the site." };
+  if (reading.medium === "print") return { ...base, result: "fail", detail: "Looks like a photo of a printed photo, not of the site." };
+  if (reading.medium === "unsure") return { ...base, result: "unknown", detail: "Couldn't tell whether this is a photo of the site itself." };
+  return { ...base, result: "pass", detail: "A photo of the site itself, not of a screen or a print." };
+}
+
+function expectedItemsCheck(reading: ProofReading, expected: ExpectedItem[]): ProofCheck {
+  const base = { name: "expected_items", hard: false } as const;
+  if (expected.length === 0) return { ...base, result: "unknown", detail: "There are no paid items to compare with." };
+  const missing: string[] = [];
+  const short: string[] = [];
+  const uncounted: string[] = [];
+  const seen: string[] = [];
+  for (const item of expected) {
+    const matches = reading.itemsSeen.filter((s) => s.itemKey === item.itemKey);
+    if (matches.length === 0) { missing.push(item.description); continue; }
+    if (matches.some((s) => s.qty === null)) { uncounted.push(item.description); continue; }
+    const qty = matches.reduce((sum, s) => sum + (s.qty ?? 0), 0);
+    const counted = `${item.description} (about ${qty} of ${item.qty})`;
+    if (qty < item.qty * MIN_SHARE_SEEN) short.push(counted);
+    else seen.push(counted);
+  }
+  if (missing.length || short.length) {
+    const parts = [];
+    if (missing.length) parts.push(`Not seen in the photo: ${list(missing)}.`);
+    if (short.length) parts.push(`Fewer than half of what was paid for: ${list(short)}.`);
+    return { ...base, result: "fail", detail: parts.join(" ") };
+  }
+  if (uncounted.length) return { ...base, result: "unknown", detail: `Couldn't count ${list(uncounted)}.` };
+  return { ...base, result: "pass", detail: `Shows ${list(seen)}.` };
+}
+
+function consistencyCheck(reading: ProofReading): ProofCheck {
+  const base = { name: "consistency", hard: false } as const;
+  if (reading.sameSite === null) {
+    return { ...base, result: "pass", detail: "This is the first photo of the site, so there's nothing to compare it with." };
+  }
+  if (reading.sameSite === "same") return { ...base, result: "pass", detail: "Shows the same site as earlier proofs." };
+  if (reading.sameSite === "different") return { ...base, result: "fail", detail: "Doesn't look like the site in earlier proofs." };
+  return { ...base, result: "unknown", detail: "Couldn't tell whether this is the same site as earlier proofs." };
 }
 
 // The outcome rule: any hard fail is Suspicious; otherwise any fail or unknown needs fresh proof;

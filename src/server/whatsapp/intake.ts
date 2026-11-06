@@ -3,6 +3,7 @@
 // data; nothing in it is ever followed as an instruction.
 
 import { eq } from "drizzle-orm";
+import type { ProofVision } from "@/server/ai/proof-vision";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
@@ -17,6 +18,7 @@ export type IntakeDeps = {
   storeMedia: (path: string, file: MediaFile) => Promise<string>;
   send: (to: string, body: string) => Promise<string>;
   afterReply?: (stored: StoredInbound) => Promise<void>; // the slow reading work, once the message is safe and answered
+  vision?: ProofVision; // inspects proof photos; without it their vision checks stay unknown
 };
 
 export type StoredInbound = {
@@ -92,7 +94,8 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
     }
   }
 
-  // Proof replies and photos never reach the reading models: they are matched in code.
+  // Proof replies are matched in code. A proof photo is checked by the verification engine, where
+  // the vision model only reports what it sees; it is never read as a quote or a request.
   if (!message.unsupported && message.kind === "text" && isProofKeyword(message.text)) {
     await answerProofKeyword(deps, contact, message);
     return stored.id;
