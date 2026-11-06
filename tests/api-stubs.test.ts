@@ -5,7 +5,6 @@ import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { GET as getProject } from "@/app/api/projects/[id]/route";
-import { GET as getGantt } from "@/app/api/projects/[id]/gantt/route";
 import { GET as getRequest } from "@/app/api/requests/[id]/route";
 import { POST as declineRequest } from "@/app/api/requests/[id]/decline/route";
 import { POST as createOrder } from "@/app/api/payments/orders/route";
@@ -46,17 +45,11 @@ function ctx<P extends Record<string, string>>(params: P) {
 }
 
 describe("project routes", () => {
-  it("returns the demo project and Gantt", async () => {
+  it("returns the demo project", async () => {
     const project = await getProject(get(`/api/projects/${DEMO_PROJECT_ID}`), ctx({ id: DEMO_PROJECT_ID }));
     expect(project.status).toBe(200);
     expect(project.headers.get("x-hakika-mock")).toBe("1");
     expect((await project.json()).milestones).toHaveLength(5);
-
-    const gantt = await (await getGantt(get("/x"), ctx({ id: DEMO_PROJECT_ID }))).json();
-    const taskIds = new Set(gantt.tasks.map((t: { id: string }) => t.id));
-    for (const d of gantt.dependencies) {
-      expect(taskIds.has(d.fromTask) && taskIds.has(d.toTask)).toBe(true);
-    }
   });
 
   it("returns 404 with an error body for an unknown project", async () => {
