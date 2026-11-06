@@ -104,3 +104,59 @@ describe("the PayPal client", () => {
     expect(() => payPalFromEnv({ PAYPAL_ENV: "sandbox", ...keys })).not.toThrow();
   });
 });
+
+describe("checking a webhook's signature with PayPal", () => {
+  const signed = new Headers({
+    "paypal-auth-algo": "SHA256withRSA",
+    "paypal-cert-url": "https://api.sandbox.paypal.com/v1/notifications/certs/CERT-test",
+    "paypal-transmission-id": "transmission-1",
+    "paypal-transmission-sig": "ZmFrZS1zaWduYXR1cmUtZm9yLXRlc3Rz",
+    "paypal-transmission-time": "2026-11-06T18:40:00Z",
+  });
+  const rawBody = '{"id":"WH-TEST-1","event_type":"PAYMENT.CAPTURE.COMPLETED",  "resource":{"id":"CAP-1"}}';
+
+  it("sends PayPal the headers, the webhook ID and the event exactly as it arrived", async () => {
+    const { calls, client } = fakePayPal(() => Response.json({ verification_status: "SUCCESS" }));
+
+    expect(await client.verifyWebhookSignature({ headers: signed, rawBody, webhookId: "WH-ID" })).toBe(true);
+    const call = calls.at(-1)!;
+    expect(call.url).toBe("https://api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature");
+    const sent = call.init.body as string;
+    expect(sent.endsWith(`"webhook_event":${rawBody}}`)).toBe(true); // spacing and key order untouched
+    expect(JSON.parse(sent)).toMatchObject({
+      auth_algo: "SHA256withRSA",
+      cert_url: signed.get("paypal-cert-url"),
+      transmission_id: signed.get("paypal-transmission-id"),
+      transmission_sig: signed.get("paypal-transmission-sig"),
+      transmission_time: "2026-11-06T18:40:00Z",
+      webhook_id: "WH-ID",
+    });
+  });
+
+  it("treats any status but SUCCESS as a failed check", async () => {
+    const { client } = fakePayPal(() => Response.json({ verification_status: "FAILURE" }));
+    expect(await client.verifyWebhookSignature({ headers: signed, rawBody, webhookId: "WH-ID" })).toBe(false);
+  });
+
+  it("fails without asking PayPal when a signature header is missing", async () => {
+    const { calls, client } = fakePayPal(() => Response.json({ verification_status: "SUCCESS" }));
+    const headers = new Headers(signed);
+    headers.delete("paypal-transmission-sig");
+    expect(await client.verifyWebhookSignature({ headers, rawBody, webhookId: "WH-ID" })).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a body that isn't exactly one JSON object, so it can't smuggle in its own webhook_id", async () => {
+    const { calls, client } = fakePayPal(() => Response.json({ verification_status: "SUCCESS" }));
+    for (const body of [`${rawBody},"webhook_id":"ATTACKER"`, "[1]", "not json", ""]) {
+      expect(await client.verifyWebhookSignature({ headers: signed, rawBody: body, webhookId: "WH-ID" })).toBe(false);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("throws a PayPalApiError when PayPal can't check it", async () => {
+    const { client } = fakePayPal(() => Response.json({ name: "INTERNAL_SERVER_ERROR" }, { status: 500 }));
+    await expect(client.verifyWebhookSignature({ headers: signed, rawBody, webhookId: "WH-ID" }))
+      .rejects.toBeInstanceOf(PayPalApiError);
+  });
+});

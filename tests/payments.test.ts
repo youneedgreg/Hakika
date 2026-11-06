@@ -55,6 +55,9 @@ function fakeSandbox() {
       }
       return stored.order;
     },
+    async verifyWebhookSignature() {
+      return true; // the route checks signatures; these tests call the handler after that
+    },
   };
 
   return {
