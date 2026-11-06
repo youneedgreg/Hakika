@@ -20,6 +20,9 @@ export type PaymentDeps = {
   appUrl: string; // where PayPal sends the owner back after approving or cancelling
   rate?: () => Promise<{ kesPerUsd: string }>;
   now?: () => Date;
+  // Told which payments a step marked paid, once its transaction has committed: for the
+  // WhatsApp confirmations. A payment is marked paid once, so each is reported once.
+  onPaid?: (paymentIds: string[]) => void | Promise<void>;
 };
 
 export type PaymentOutcome<T> =
@@ -42,7 +45,7 @@ export async function createOrderForRequest(
   deps: PaymentDeps,
 ): Promise<PaymentOutcome<CreateOrderResult>> {
   const rate = deps.rate ?? (() => getDailyRate(db));
-  return db.transaction(async (tx) => {
+  return paymentStep(db, deps, async (tx, paid) => {
     const [request] = await tx.select().from(s.requests).where(eq(s.requests.id, requestId)).for("update");
     if (!request) return fail(404, "not_found", "Request not found.");
     if (request.status !== "awaiting_approval") {
@@ -76,7 +79,7 @@ export async function createOrderForRequest(
       const capture = order && captureOf(order);
       if (capture?.status === "COMPLETED") {
         // PayPal took the money but the capture was never recorded here: record it now.
-        await applyCapture(tx, request, payment, capture, ownerActor, deps);
+        await applyCapture(tx, request, payment, capture, ownerActor, deps, paid);
         return fail(409, "already_paid", "This request has already been paid.");
       }
       const unchanged = payment.payeeEmail === supplier.paypalEmail
@@ -122,7 +125,7 @@ export async function captureOrderForRequest(
   orderId: string,
   deps: PaymentDeps,
 ): Promise<PaymentOutcome<CaptureResult>> {
-  return db.transaction(async (tx) => {
+  return paymentStep(db, deps, async (tx, paid) => {
     const [found] = await tx.select().from(s.payments).where(eq(s.payments.paypalOrderId, orderId));
     if (!found?.requestId) return fail(404, "not_found", "Order not found.");
     const [request] = await tx.select().from(s.requests).where(eq(s.requests.id, found.requestId)).for("update");
@@ -140,7 +143,7 @@ export async function captureOrderForRequest(
       const order = await deps.paypal.getOrder(orderId);
       const capture = order && captureOf(order);
       return capture
-        ? applyCapture(tx, request, payment, capture, ownerActor, deps)
+        ? applyCapture(tx, request, payment, capture, ownerActor, deps, paid)
         : ok({ requestId: request.id, status: request.status, captureId: payment.paypalCaptureId });
     }
     if (request.status !== "awaiting_approval") {
@@ -157,7 +160,7 @@ export async function captureOrderForRequest(
       const order = await deps.paypal.getOrder(other.paypalOrderId!);
       const capture = order && captureOf(order);
       if (capture?.status === "COMPLETED") {
-        await applyCapture(tx, request, other, capture, ownerActor, deps);
+        await applyCapture(tx, request, other, capture, ownerActor, deps, paid);
         return fail(409, "already_paid", "This request was already paid with another PayPal order.");
       }
     }
@@ -181,7 +184,7 @@ export async function captureOrderForRequest(
     }
     const capture = captureOf(order);
     if (!capture) throw new Error(`PayPal returned order ${orderId} with no capture.`);
-    return applyCapture(tx, request, payment, capture, ownerActor, deps);
+    return applyCapture(tx, request, payment, capture, ownerActor, deps, paid);
   });
 }
 
@@ -205,7 +208,7 @@ export async function syncPaymentFromPayPal(
   deps: PaymentDeps,
   source: WebhookSource,
 ): Promise<SyncResult> {
-  return db.transaction(async (tx) => {
+  return paymentStep(db, deps, async (tx, paid) => {
     const [found] = await tx.select().from(s.payments).where(eq(s.payments.paypalOrderId, orderId));
     if (!found?.requestId) return "unknown_order";
     const [request] = await tx.select().from(s.requests).where(eq(s.requests.id, found.requestId)).for("update");
@@ -224,20 +227,20 @@ export async function syncPaymentFromPayPal(
           capture.id, data);
         return "unexpected";
       }
-      await applyCapture(tx, request, payment, capture, await ownerOf(tx, request.projectId), deps, data);
+      await applyCapture(tx, request, payment, capture, await ownerOf(tx, request.projectId), deps, paid, data);
       return "recorded";
     }
 
     if (payment.status !== "captured") return "no_change";
-    const paid = `USD ${centsToAmount(payment.amountUsdCents)} paid to ${await payeeName(tx, payment)}`;
+    const amountPaid = `USD ${centsToAmount(payment.amountUsdCents)} paid to ${await payeeName(tx, payment)}`;
     if (capture.status === "REFUNDED") {
       await tx.update(s.payments).set({ status: paymentMachine.transition(payment.status, "refunded") }).where(eq(s.payments.id, payment.id));
-      await audit(tx, request, payment, "system", "payment.refunded", `The ${paid} was refunded through PayPal.`, capture.id, data);
+      await audit(tx, request, payment, "system", "payment.refunded", `The ${amountPaid} was refunded through PayPal.`, capture.id, data);
       return "refunded";
     }
     if (capture.status === "PARTIALLY_REFUNDED") {
       await audit(tx, request, payment, "system", "payment.partially_refunded",
-        `Part of the ${paid} was refunded through PayPal.`, capture.id, data);
+        `Part of the ${amountPaid} was refunded through PayPal.`, capture.id, data);
       return "partially_refunded";
     }
     if (capture.status === "COMPLETED" && source.eventType === "PAYMENT.CAPTURE.COMPLETED") {
@@ -253,6 +256,26 @@ export async function syncPaymentFromPayPal(
   });
 }
 
+// Runs one payment step in a transaction. Payments it marks paid are reported only after the
+// commit, so nothing is announced for a step that rolled back.
+async function paymentStep<T>(
+  db: AnyDb,
+  deps: PaymentDeps,
+  step: (tx: AnyDb, paid: string[]) => Promise<T>,
+): Promise<T> {
+  const paid: string[] = [];
+  const result = await db.transaction((tx) => step(tx, paid));
+  if (paid.length > 0 && deps.onPaid) {
+    try {
+      await deps.onPaid(paid);
+    } catch (error) {
+      // The money has moved and is recorded; a failed announcement mustn't make it look otherwise.
+      console.error("Payment confirmations failed:", error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  return result;
+}
+
 // Records what PayPal says happened to a capture. Only COMPLETED marks the request paid.
 async function applyCapture(
   tx: AnyDb,
@@ -261,6 +284,7 @@ async function applyCapture(
   capture: PayPalCapture,
   ownerActor: string,
   deps: PaymentDeps,
+  paid: string[],
   extra?: object,
 ): Promise<PaymentOutcome<CaptureResult>> {
   const approved = request.status === "approved" ? request.status : requestMachine.transition(request.status, "owner_approved");
@@ -272,6 +296,7 @@ async function applyCapture(
       ...ids, status: paymentMachine.transition(payment.status, "captured"), capturedAt: (deps.now ?? (() => new Date()))(),
     }).where(eq(s.payments.id, payment.id));
     await tx.update(s.requests).set({ status }).where(eq(s.requests.id, request.id));
+    paid.push(payment.id);
     const data = capture.amount || extra ? { ...(capture.amount && { captured: capture.amount }), ...extra } : undefined;
     await audit(tx, request, payment, ownerActor, "payment.captured",
       `USD ${centsToAmount(payment.amountUsdCents)} was paid through PayPal to ${await payeeName(tx, payment)}.`,

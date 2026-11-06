@@ -6,6 +6,7 @@
 import type { NextRequest } from "next/server";
 import { getDb } from "@/server/db/client";
 import { apiError } from "@/server/http";
+import { confirmAfterResponse } from "@/server/payments/live";
 import { PayPalApiError, PayPalNotConfigured, payPalFromEnv, type PayPalClient } from "@/server/payments/paypal";
 import { handlePayPalEvent, payPalEventSchema } from "@/server/payments/webhooks";
 import { describeError } from "@/server/whatsapp/intake";
@@ -43,7 +44,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await handlePayPalEvent(getDb(), event.data, { paypal, appUrl: new URL(request.url).origin });
+    const db = getDb();
+    const result = await handlePayPalEvent(db, event.data, {
+      paypal, appUrl: new URL(request.url).origin, onPaid: confirmAfterResponse(db),
+    });
     return Response.json({ result });
   } catch (error) {
     console.error("PayPal webhook processing failed:", describeError(error));

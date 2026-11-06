@@ -5,12 +5,13 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { and, asc, eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { captureOrderForRequest, createOrderForRequest, type PaymentDeps } from "@/server/payments/orders";
 import { PayPalApiError, type PayPalClient, type PayPalOrder } from "@/server/payments/paypal";
 import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks";
+import { sendPaymentConfirmations } from "@/server/payments/confirmations";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -135,6 +136,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await db.delete(s.webhookEvents);
+  await db.delete(s.messages);
   await db.delete(s.auditEvents);
   await db.delete(s.payments);
   await db.delete(s.findings);
@@ -466,5 +468,90 @@ describe("PayPal webhook events (after the signature check)", () => {
     await expect(handle(event)).rejects.toThrow("socket hang up");
     sandbox.paypal.getOrder = getOrder;
     expect(await handle(event)).toBe("confirmed");
+  });
+});
+
+describe("telling the payment steps' caller what was paid", () => {
+  it("reports a payment once, after it is recorded, and not for a pending capture", async () => {
+    const reported: string[][] = [];
+    const withReport = (): PaymentDeps => ({ ...deps(), onPaid: (ids) => { reported.push(ids); } });
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.captureWill("PENDING");
+
+    await captureOrderForRequest(db, orderId, withReport());
+    expect(reported).toEqual([]);
+    sandbox.completeLater(orderId);
+    await handlePayPalEvent(db, { id: "WH-paid", event_type: "PAYMENT.CAPTURE.COMPLETED",
+      resource: { id: `CAP-${orderId}`, supplementary_data: { related_ids: { order_id: orderId } } } }, withReport());
+    await captureOrderForRequest(db, orderId, withReport());
+
+    const [payment] = await paymentsFor(request.id);
+    expect(reported).toEqual([[payment.id]]);
+  });
+
+  it("returns the payment result even when reporting fails", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    const outcome = await captureOrderForRequest(db, orderId, { ...deps(), onPaid: () => { throw new Error("Twilio down"); } });
+    expect(outcome).toMatchObject({ ok: true, value: { status: "paid" } });
+  });
+});
+
+describe("WhatsApp confirmations after a supplier is paid", () => {
+  const GRACE_TEST_PHONE = "+15550000103"; // a test phone mapped onto Grace; never a seeded number
+  async function paidPayment() {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+    return (await paymentsFor(request.id))[0];
+  }
+  const sentMessages = () => db.select().from(s.messages).where(eq(s.messages.direction, "outbound")).orderBy(asc(s.messages.createdAt));
+
+  it("sends fixed templates only to mapped test phones, and stores the rest unsent", async () => {
+    const payment = await paidPayment();
+    const send = vi.fn(async () => "SM-1");
+
+    const outcomes = await sendPaymentConfirmations(
+      { db, send, testPhones: new Map([[GRACE_TEST_PHONE, DEMO.contactIds.grace]]) }, payment.id);
+
+    expect(send).toHaveBeenCalledExactlyOnceWith(GRACE_TEST_PHONE,
+      "Hakika: KES 39,500 has been paid to Mlima Hardware through PayPal for a materials order. Please arrange the delivery to the site.");
+    expect(outcomes).toEqual([
+      { contactId: DEMO.contactIds.peter, sent: false, reason: "no_test_phone" },
+      { contactId: DEMO.contactIds.grace, sent: true },
+    ]);
+    const messages = await sentMessages();
+    expect(messages.map((m) => [m.contactId, m.templateKey, m.language, m.twilioSid])).toEqual(expect.arrayContaining([
+      [DEMO.contactIds.peter, "materials_paid_foreman", "sw", null],
+      [DEMO.contactIds.grace, "materials_paid_supplier", "en", "SM-1"],
+    ]));
+    expect(messages.find((m) => m.contactId === DEMO.contactIds.peter)?.body).toContain("Mlima Hardware KES 39,500");
+    const [row] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.action, "payment.confirmations"));
+    expect(row).toMatchObject({ paymentId: payment.id, description: "WhatsApp confirmations of this payment: 1 of 2 sent." });
+  });
+
+  it("records a failed send without stopping the others", async () => {
+    const payment = await paidPayment();
+    const send = vi.fn(async () => { throw new Error("Twilio refused the message"); });
+    const outcomes = await sendPaymentConfirmations({ db, send, testPhones: new Map([
+      ["+15550000101", DEMO.contactIds.peter], [GRACE_TEST_PHONE, DEMO.contactIds.grace],
+    ]) }, payment.id);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(outcomes.map((o) => o.reason)).toEqual(["send_failed", "send_failed"]);
+    expect((await sentMessages()).every((m) => m.twilioSid === null)).toBe(true);
+  });
+
+  it("sends nothing for a payment that isn't captured", async () => {
+    const request = await addRequest();
+    await createOrder(request.id);
+    const [payment] = await paymentsFor(request.id);
+    const send = vi.fn(async () => "SM-1");
+    expect(await sendPaymentConfirmations({ db, send, testPhones: new Map() }, payment.id)).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
   });
 });

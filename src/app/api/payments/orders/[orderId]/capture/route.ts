@@ -8,6 +8,7 @@ import { getDb } from "@/server/db/client";
 import { mockJson } from "@/server/http";
 import { DEMO_REQUEST_ID } from "@/server/mocks/demo";
 import { captureOrderForRequest } from "@/server/payments/orders";
+import { confirmAfterResponse } from "@/server/payments/live";
 import { payPalFromEnv } from "@/server/payments/paypal";
 import { paymentErrorResponse, paymentOutcomeResponse } from "@/server/payments/responses";
 
@@ -21,9 +22,11 @@ export async function POST(
     return mockJson(result);
   }
   try {
-    const outcome = await captureOrderForRequest(getDb(), orderId, {
+    const db = getDb();
+    const outcome = await captureOrderForRequest(db, orderId, {
       paypal: payPalFromEnv(),
       appUrl: new URL(request.url).origin,
+      onPaid: confirmAfterResponse(db),
     });
     return paymentOutcomeResponse(outcome);
   } catch (error) {
