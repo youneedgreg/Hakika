@@ -100,8 +100,10 @@ export function inspectedCodeCheck(issued: string, inspection: ProofInspection |
   return codeCheck(issued, undefined);
 }
 
-// A delivery photo should show at least this share of each item paid for. Counting stacked bags in
-// a photo is rough, so this only catches a delivery that is clearly short.
+// A delivery photo must show every item paid for. How many can't be told from one photo: on Judge
+// Mode's recording (7 Nov), Nova counted "about 12" bags on a pallet with about 30 in view and 50
+// paid for. So a count below this share of what was paid for is noted for the owner, not failed.
+// A short delivery isn't caught by this check; an item that isn't in the photo at all is.
 export const MIN_SHARE_SEEN = 0.5;
 
 const DISTRUSTED = "Text in the photo reads like instructions to the AI, so nothing read from it was used.";
@@ -138,26 +140,26 @@ function expectedItemsCheck(reading: ProofReading, expected: ExpectedItem[]): Pr
   const base = { name: "expected_items", hard: false } as const;
   if (expected.length === 0) return { ...base, result: "unknown", detail: "There are no paid items to compare with." };
   const missing: string[] = [];
-  const short: string[] = [];
-  const uncounted: string[] = [];
   const seen: string[] = [];
+  let low = false;
+  let uncounted = false;
   for (const item of expected) {
     const matches = reading.itemsSeen.filter((s) => s.itemKey === item.itemKey);
     if (matches.length === 0) { missing.push(item.description); continue; }
-    if (matches.some((s) => s.qty === null)) { uncounted.push(item.description); continue; }
+    if (matches.some((s) => s.qty === null)) {
+      uncounted = true;
+      seen.push(`${item.description} (not counted)`);
+      continue;
+    }
     const qty = matches.reduce((sum, s) => sum + (s.qty ?? 0), 0);
-    const counted = `${item.description} (about ${qty} of ${item.qty})`;
-    if (qty < item.qty * MIN_SHARE_SEEN) short.push(counted);
-    else seen.push(counted);
+    if (qty < item.qty * MIN_SHARE_SEEN) low = true;
+    seen.push(`${item.description} (about ${qty} of ${item.qty})`);
   }
-  if (missing.length || short.length) {
-    const parts = [];
-    if (missing.length) parts.push(`Not seen in the photo: ${list(missing)}.`);
-    if (short.length) parts.push(`Fewer than half of what was paid for: ${list(short)}.`);
-    return { ...base, result: "fail", detail: parts.join(" ") };
-  }
-  if (uncounted.length) return { ...base, result: "unknown", detail: `Couldn't count ${list(uncounted)}.` };
-  return { ...base, result: "pass", detail: `Shows ${list(seen)}.` };
+  if (missing.length) return { ...base, result: "fail", detail: `Not seen in the photo: ${list(missing)}.` };
+  const notes = [];
+  if (low) notes.push("Fewer than half of what was paid for were counted, but stacked goods can't be counted from one photo: check the delivery note.");
+  else if (uncounted) notes.push("Stacked goods can't always be counted from one photo: check the delivery note.");
+  return { ...base, result: "pass", detail: [`Shows ${list(seen)}.`, ...notes].join(" ") };
 }
 
 function consistencyCheck(reading: ProofReading): ProofCheck {

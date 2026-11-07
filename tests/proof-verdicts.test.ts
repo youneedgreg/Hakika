@@ -308,12 +308,12 @@ describe("verdicts with the vision model (Day 12)", () => {
     expect(verdict.explanation).toBe(`Suspicious. The photo shows WXYZ, but the issued code is ${link.code}.`);
   });
 
-  it("asks for fresh proof of a short delivery or a photo of a screen", async () => {
+  it("asks for fresh proof of a delivery photo without the goods, or a photo of a screen", async () => {
     const short = await deliveryWithCode(0);
     const a = await upload(6, short.link.token, await photo(1), ON_SITE,
-      fakeVision(({ code }) => sees({ code, itemsSeen: [{ itemKey: "cement_50kg", description: "bags", qty: 10 }] })));
+      fakeVision(({ code }) => sees({ code, itemsSeen: [{ itemKey: null, description: "timber", qty: 10 }] })));
     expect(await verdictOf(a)).toMatchObject({
-      outcome: "needs_fresh_proof", explanation: "Fresh proof needed. Fewer than half of what was paid for: Simenti 50kg (about 10 of 50).",
+      outcome: "needs_fresh_proof", explanation: "Fresh proof needed. Not seen in the photo: Simenti 50kg.",
     });
 
     const screen = await deliveryWithCode(60);
