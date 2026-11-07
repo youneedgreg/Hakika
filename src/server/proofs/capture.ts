@@ -3,6 +3,7 @@
 import { newId } from "@/server/db/ids";
 import { dHash, UnreadableImage } from "./dhash";
 import { findByToken, recordProof, type LinkProblem, type ProofDeps } from "./requests";
+import { verifyStoredProof } from "./verdicts";
 
 export type StoredFile = { bytes: Uint8Array; contentType: string };
 
@@ -54,6 +55,8 @@ export async function submitCaptureProof(
   if ("problem" in result) {
     // Someone else used the link, or it expired, while this photo was uploading.
     await deps.deleteFile(blobPath).catch(() => undefined);
+    return result;
   }
+  await verifyStoredProof(deps, result.proofId);
   return result;
 }

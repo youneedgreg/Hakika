@@ -12,6 +12,7 @@ import { POST as createOrder } from "@/app/api/payments/orders/route";
 import { POST as captureOrder } from "@/app/api/payments/orders/[orderId]/capture/route";
 import { GET as getProofLink, POST as uploadProof } from "@/app/api/proof/[token]/route";
 import { GET as getProof } from "@/app/api/proofs/[id]/route";
+import { GET as getProofImage } from "@/app/api/proofs/[id]/image/route";
 import { POST as overrideProof } from "@/app/api/proofs/[id]/override/route";
 import { POST as chat } from "@/app/api/agent/chat/route";
 import { GET as getLedger } from "@/app/api/ledger/route";
@@ -154,6 +155,13 @@ describe("proof routes", () => {
   it("doesn't treat object built-ins as proof IDs", async () => {
     const res = await getProof(get("/x"), ctx({ id: "constructor" }));
     expect(res.status).toBe(404);
+  });
+
+  it("refuses malformed proof IDs before touching the database", async () => {
+    for (const id of ["prf_short", "prf_../../etc/passwd", DEMO_PROOF_IDS.verified]) {
+      expect((await getProofImage(get("/x"), ctx({ id }))).status).toBe(404);
+    }
+    expect((await getProof(get("/x"), ctx({ id: "prf_short" }))).status).toBe(404);
   });
 
   it("needs a reason to override", async () => {
