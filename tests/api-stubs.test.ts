@@ -165,16 +165,8 @@ describe("proof routes", () => {
 });
 
 describe("ledger, agent and Judge Mode routes", () => {
-  it("returns ledger rows as JSON and CSV", async () => {
-    const json = await (await getLedger(get(`/api/ledger?projectId=${DEMO_PROJECT_ID}`))).json();
-    expect(json.rows.length).toBeGreaterThan(0);
-
-    const csv = await getLedger(get(`/api/ledger?projectId=${DEMO_PROJECT_ID}&format=csv`));
-    expect(csv.headers.get("content-type")).toContain("text/csv");
-    const lines = (await csv.text()).trim().split("\r\n");
-    expect(lines[0]).toBe("at,kind,description,amount,currency,amount_usd,paypal_order_id,paypal_capture_id,request_id,proof_id");
-    expect(lines).toHaveLength(json.rows.length + 1);
-
+  it("asks for a project ID before reading the ledger", async () => {
+    // The rows come from the database: tests/payments.test.ts.
     expect((await getLedger(get("/api/ledger"))).status).toBe(400);
   });
 
@@ -200,8 +192,30 @@ describe("ledger, agent and Judge Mode routes", () => {
   });
 });
 
-describe("webhooks", () => {
-  it("answer 501 until they are built", async () => {
-    expect((await paypalWebhook()).status).toBe(501);
+describe("the PayPal webhook", () => {
+  const event = { id: "WH-1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: {} };
+
+  it("answers 503 until PayPal and the webhook ID are set", async () => {
+    vi.stubEnv("PAYPAL_ENV", "sandbox");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "id");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "");
+    const res = await paypalWebhook(post("/api/webhooks/paypal", event));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe("paypal_webhook_not_configured");
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses a delivery without PayPal's signature headers, before asking PayPal anything", async () => {
+    vi.stubEnv("PAYPAL_ENV", "sandbox");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "id");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "secret");
+    vi.stubEnv("PAYPAL_WEBHOOK_ID", "WH-ID");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const res = await paypalWebhook(post("/api/webhooks/paypal", event));
+    expect(res.status).toBe(401);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 });

@@ -55,10 +55,26 @@ export type NewOrder = {
   idempotencyKey: string;
 };
 
+// The headers PayPal signs each webhook delivery with.
+const SIGNATURE_HEADERS = {
+  auth_algo: "paypal-auth-algo",
+  cert_url: "paypal-cert-url",
+  transmission_id: "paypal-transmission-id",
+  transmission_sig: "paypal-transmission-sig",
+  transmission_time: "paypal-transmission-time",
+} as const;
+
+export type WebhookDelivery = {
+  headers: Headers;
+  rawBody: string; // exactly as received: PayPal says re-serialised JSON can fail verification
+  webhookId: string; // from the app's webhook settings; PayPal never sends it
+};
+
 export type PayPalClient = {
   createOrder(order: NewOrder): Promise<PayPalOrder>;
   getOrder(orderId: string): Promise<PayPalOrder | null>; // null when PayPal doesn't know the order
   captureOrder(orderId: string, idempotencyKey: string): Promise<PayPalOrder>;
+  verifyWebhookSignature(delivery: WebhookDelivery): Promise<boolean>;
 };
 
 // The order's capture, if it has one. Hakika puts one purchase unit in each order.
@@ -97,10 +113,15 @@ export function createPayPalClient(
   }
 
   async function call(method: "GET" | "POST", path: string, body?: object, headers: Record<string, string> = {}) {
+    return orderSchema.parse(await send(method, path, body, headers));
+  }
+
+  // A string body is sent as it is; an object is serialised.
+  async function send(method: "GET" | "POST", path: string, body?: object | string, headers: Record<string, string> = {}) {
     const response = await fetchFn(`${SANDBOX_API}${path}`, {
       method,
       headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json", ...headers },
-      body: body ? JSON.stringify(body) : undefined,
+      body: typeof body === "string" ? body : body ? JSON.stringify(body) : undefined,
     });
     const json: unknown = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -112,7 +133,7 @@ export function createPayPalClient(
         response.headers.get("paypal-debug-id"),
       );
     }
-    return orderSchema.parse(json);
+    return json;
   }
 
   return {
@@ -154,5 +175,30 @@ export function createPayPalClient(
         Prefer: "return=representation",
       });
     },
+    async verifyWebhookSignature({ headers, rawBody, webhookId }) {
+      const fields: Record<string, string> = { webhook_id: webhookId };
+      for (const [field, header] of Object.entries(SIGNATURE_HEADERS)) {
+        const value = headers.get(header);
+        if (!value) return false;
+        fields[field] = value;
+      }
+      // The event goes in as received text. It must be one JSON object and nothing else, or text
+      // after it could add fields of its own, such as a second webhook_id.
+      if (!isJsonObject(rawBody)) return false;
+      const body = `${JSON.stringify(fields).slice(0, -1)},"webhook_event":${rawBody}}`;
+      const answer = z.object({ verification_status: z.string() })
+        .parse(await send("POST", "/v1/notifications/verify-webhook-signature", body));
+      // PayPal documents SUCCESS; anything else is a failure.
+      return answer.verification_status === "SUCCESS";
+    },
   };
+}
+
+function isJsonObject(text: string): boolean {
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
