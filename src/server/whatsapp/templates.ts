@@ -48,6 +48,11 @@ const TEMPLATES = {
     en: "Hakika: there is no delivery waiting for proof right now.",
     sw: "Hakika: hakuna mzigo unaosubiri uthibitisho kwa sasa.",
   },
+  // A DONE reply when no milestone is in progress.
+  no_milestone_due: {
+    en: "Hakika: there is no work waiting for proof right now.",
+    sw: "Hakika: hakuna kazi inayosubiri uthibitisho kwa sasa.",
+  },
 } as const satisfies Record<string, Record<Language, string>>;
 
 export type TemplateKey = keyof typeof TEMPLATES;

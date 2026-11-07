@@ -36,7 +36,20 @@ export function isWellFormedToken(token: string): boolean {
 // exactly (ignoring case, spaces and trailing punctuation), never read by a model.
 const PROOF_KEYWORDS = new Set(["PROOF", "THIBITISHA"]);
 
+// The words a foreman replies with when a milestone's work is finished. The Swahili word needs
+// Juliet's check.
+const DONE_KEYWORDS = new Set(["DONE", "IMEKAMILIKA"]);
+
+function keyword(text: string | undefined): string | null {
+  return text ? text.trim().replace(/[.!?]+$/, "").trim().toUpperCase() : null;
+}
+
 export function isProofKeyword(text: string | undefined): boolean {
-  if (!text) return false;
-  return PROOF_KEYWORDS.has(text.trim().replace(/[.!?]+$/, "").trim().toUpperCase());
+  const word = keyword(text);
+  return word !== null && PROOF_KEYWORDS.has(word);
+}
+
+export function isDoneKeyword(text: string | undefined): boolean {
+  const word = keyword(text);
+  return word !== null && DONE_KEYWORDS.has(word);
 }

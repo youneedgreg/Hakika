@@ -22,7 +22,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "ima
 function linkProblem(problem: LinkProblem): Response {
   if (problem === "used") return apiError(410, "proof_link_used", "This proof link has already been used.");
   if (problem === "expired") {
-    return apiError(410, "proof_link_expired", "This proof link has expired. Reply PROOF on WhatsApp for a new code.");
+    return apiError(410, "proof_link_expired", "This proof link has expired. Reply PROOF (or DONE for finished work) on WhatsApp for a new code.");
   }
   return notFound("Proof link");
 }

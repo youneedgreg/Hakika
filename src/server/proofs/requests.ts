@@ -11,7 +11,7 @@ import type { AnyDb } from "@/server/db/client";
 import type { PROOF_PURPOSES, PROOF_SOURCES } from "@/server/db/enums";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
-import { proofRequestMachine, requestMachine } from "@/server/state/machines";
+import { milestoneMachine, proofRequestMachine, requestMachine } from "@/server/state/machines";
 import { generateCode, generateToken, hashToken, isWellFormedToken, PROOF_LINK_TTL_MS } from "./codes";
 
 type Purpose = (typeof PROOF_PURPOSES)[number];
@@ -28,7 +28,7 @@ export type IssuedProofRequest = { id: string; code: string; token: string; expi
 
 // Issues a new code and link. Any other open request for the same delivery (or, for progress, the
 // same milestone) is superseded, so only the newest link works. The token is returned once, to be
-// sent; only its hash is stored.
+// sent; only its hash is stored. A progress code moves its milestone to awaiting_proof.
 export async function issueProofRequest(deps: ProofDeps, input: {
   projectId: string;
   milestoneId: string;
@@ -84,6 +84,11 @@ export async function issueProofRequest(deps: ProofDeps, input: {
       }
     }
 
+    if (input.purpose === "progress" && milestoneMachine.can(milestone.status, "proof_requested")) {
+      await tx.update(s.milestones).set({ status: milestoneMachine.transition(milestone.status, "proof_requested") })
+        .where(eq(s.milestones.id, milestone.id));
+    }
+
     const contact = input.contactId
       ? (await tx.select().from(s.siteContacts).where(eq(s.siteContacts.id, input.contactId)))[0]
       : undefined;
@@ -132,6 +137,15 @@ export async function findDeliveryDue(db: AnyDb, contact: Contact) {
     return { ...candidate, milestoneId: candidate.milestoneId };
   }
   return null;
+}
+
+// The milestone a foreman's DONE reply is about: the first on their project, in plan order, whose
+// work is in progress or still waiting on an accepted proof. Null when there is none.
+export async function findMilestoneDue(db: AnyDb, contact: Contact) {
+  const [milestone] = await db.select({ id: s.milestones.id }).from(s.milestones)
+    .where(and(eq(s.milestones.projectId, contact.projectId), inArray(s.milestones.status, ["in_progress", "awaiting_proof", "held"])))
+    .orderBy(s.milestones.position).limit(1);
+  return milestone ? { milestoneId: milestone.id } : null;
 }
 
 // The open request a WhatsApp photo from this contact would answer, if any.

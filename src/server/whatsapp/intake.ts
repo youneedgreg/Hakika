@@ -7,8 +7,8 @@ import type { ProofVision } from "@/server/ai/proof-vision";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
-import { isProofKeyword } from "@/server/proofs/codes";
-import { answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
+import { isDoneKeyword, isProofKeyword } from "@/server/proofs/codes";
+import { answerDoneKeyword, answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
 import type { MediaFile } from "./media";
 import { renderTemplate, type PlainTemplateKey } from "./templates";
 
@@ -98,6 +98,10 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
   // the vision model only reports what it sees; it is never read as a quote or a request.
   if (!message.unsupported && message.kind === "text" && isProofKeyword(message.text)) {
     await answerProofKeyword(deps, contact, message);
+    return stored.id;
+  }
+  if (!message.unsupported && message.kind === "text" && isDoneKeyword(message.text)) {
+    await answerDoneKeyword(deps, contact, message);
     return stored.id;
   }
   if (!message.unsupported && message.kind === "image" && file) {
