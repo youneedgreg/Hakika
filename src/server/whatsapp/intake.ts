@@ -7,7 +7,7 @@ import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
 import type { MediaFile } from "./media";
-import { renderTemplate, type TemplateKey } from "./templates";
+import { renderTemplate, type PlainTemplateKey } from "./templates";
 
 export type IntakeDeps = {
   db: AnyDb;
@@ -74,7 +74,7 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
   }).onConflictDoNothing({ target: s.messages.twilioSid }).returning({ id: s.messages.id });
   if (!stored) return null;
 
-  let template: TemplateKey = message.unsupported ? "needs_info" : "request_received";
+  let template: PlainTemplateKey = message.unsupported ? "needs_info" : "request_received";
   let file: MediaFile | null = null;
   if (message.media) {
     try {
@@ -99,7 +99,7 @@ export async function replyWithTemplate(
   deps: Pick<IntakeDeps, "db" | "send">,
   contact: Contact,
   message: InboundMessage,
-  template: TemplateKey,
+  template: PlainTemplateKey,
 ): Promise<void> {
   const body = renderTemplate(template, contact.language);
   const twilioSid = message.channel === "whatsapp" ? await deps.send(message.replyTo, body) : null;

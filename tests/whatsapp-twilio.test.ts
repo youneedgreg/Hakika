@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as simulate } from "@/app/api/judge/simulate/route";
 import { POST as webhook } from "@/app/api/webhooks/twilio/route";
 import { MAX_MEDIA_BYTES, readMediaResponse } from "@/server/whatsapp/media";
-import { renderTemplate } from "@/server/whatsapp/templates";
+import { renderTemplate, TEMPLATE_KEYS, templateSlots } from "@/server/whatsapp/templates";
 import {
   fetchTwilioMedia, isValidTwilioSignature, parseTwilioMessage, sendWhatsApp,
 } from "@/server/whatsapp/twilio";
@@ -222,5 +222,15 @@ describe("media and templates", () => {
       expect(renderTemplate(key, "sw")).toMatch(/^Hakika:/);
       expect(renderTemplate(key, "en")).not.toBe(renderTemplate(key, "sw"));
     }
+  });
+
+  it("uses the same slots in English and Swahili, and refuses to leave one empty", () => {
+    for (const key of TEMPLATE_KEYS) expect(templateSlots(key, "sw")).toEqual(templateSlots(key, "en"));
+    const params = { supplier: "Mlima Hardware", amount: "KES 39,500" };
+    expect(renderTemplate("materials_paid_supplier", "en", params))
+      .toBe("Hakika: KES 39,500 has been paid to Mlima Hardware through PayPal for a materials order. Please arrange the delivery to the site.");
+    expect(renderTemplate("materials_paid_foreman", "sw", params)).not.toMatch(/[{}]/);
+    expect(() => renderTemplate("materials_paid_foreman", "en", { supplier: "Mlima Hardware" } as typeof params))
+      .toThrow("needs {amount}");
   });
 });

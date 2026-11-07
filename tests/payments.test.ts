@@ -5,11 +5,15 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { and, asc, eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { captureOrderForRequest, createOrderForRequest, type PaymentDeps } from "@/server/payments/orders";
 import { PayPalApiError, type PayPalClient, type PayPalOrder } from "@/server/payments/paypal";
+import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks";
+import { sendPaymentConfirmations } from "@/server/payments/confirmations";
+import { loadLedger } from "@/server/projects/ledger";
+import { ledgerToCsv } from "@/server/csv";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -55,6 +59,15 @@ function fakeSandbox() {
       }
       return stored.order;
     },
+    async verifyWebhookSignature() {
+      return true; // the route checks signatures; these tests call the handler after that
+    },
+  };
+
+  const setCaptureStatus = (orderId: string, status: string) => {
+    const stored = orders.get(orderId)!;
+    const [unit] = stored.order.purchase_units!;
+    unit.payments!.captures![0] = { ...unit.payments!.captures![0], status: status as "REFUNDED" };
   };
 
   return {
@@ -75,6 +88,8 @@ function fakeSandbox() {
       const stored = orders.get(orderId)!;
       stored.order = capturedOrder(stored, "COMPLETED");
     },
+    refund: (orderId: string, part: "full" | "partial" = "full") =>
+      setCaptureStatus(orderId, part === "full" ? "REFUNDED" : "PARTIALLY_REFUNDED"),
     captureWill: (status: typeof nextCaptureStatus) => { nextCaptureStatus = status; },
     loseNextCaptureAnswer: () => { loseNextCaptureAnswer = true; },
   };
@@ -122,6 +137,8 @@ beforeAll(async () => {
 }, 60_000);
 
 beforeEach(async () => {
+  await db.delete(s.webhookEvents);
+  await db.delete(s.messages);
   await db.delete(s.auditEvents);
   await db.delete(s.payments);
   await db.delete(s.findings);
@@ -332,5 +349,260 @@ describe("capturing after the owner approves", () => {
 
   it("404s an order Hakika didn't create", async () => {
     expect(await captureOrderForRequest(db, "SOMEONE-ELSES", deps())).toMatchObject({ ok: false, httpStatus: 404 });
+  });
+});
+
+describe("PayPal webhook events (after the signature check)", () => {
+  let eventCount = 0;
+  const captureEvent = (type: string, orderId: string, captureId = `CAP-${orderId}`): PayPalEvent => ({
+    id: `WH-${++eventCount}`,
+    event_type: type,
+    resource: { id: captureId, supplementary_data: { related_ids: { order_id: orderId } } },
+  });
+  const refundEvent = (captureId: string, type = "PAYMENT.CAPTURE.REFUNDED"): PayPalEvent => ({
+    id: `WH-${++eventCount}`,
+    event_type: type,
+    resource: {
+      id: "REFUND-1",
+      links: [
+        { rel: "self", href: "https://api.sandbox.paypal.com/v2/payments/refunds/REFUND-1" },
+        { rel: "up", href: `https://api.sandbox.paypal.com/v2/payments/captures/${captureId}` },
+      ],
+    },
+  });
+  const handle = (event: PayPalEvent) => handlePayPalEvent(db, event, deps());
+
+  async function paidRequest() {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+    return { request, orderId };
+  }
+
+  it("confirms a capture the server already recorded, once, and ignores a repeated delivery", async () => {
+    const { request, orderId } = await paidRequest();
+    const event = captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId);
+
+    expect(await handle(event)).toBe("confirmed");
+    expect(await handle(event)).toBe("duplicate");
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("no_change");
+    expect(await actions(request.id)).toEqual(["payment.order_created", "payment.captured", "payment.webhook_confirmed"]);
+    expect(sandbox.counts.capture).toBe(1);
+    const [stored] = await db.select().from(s.webhookEvents).where(eq(s.webhookEvents.eventId, event.id));
+    expect(stored).toMatchObject({ provider: "paypal", type: "PAYMENT.CAPTURE.COMPLETED" });
+    expect(stored.processedAt).not.toBeNull();
+  });
+
+  it("finishes a pending capture when PayPal completes it, without capturing again", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.captureWill("PENDING");
+    await captureOrderForRequest(db, orderId, deps());
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.PENDING", orderId))).toBe("no_change");
+
+    sandbox.completeLater(orderId);
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("recorded");
+    expect(await requestStatus(request.id)).toBe("paid");
+    expect(sandbox.counts.capture).toBe(1);
+    const [captured] = await db.select().from(s.auditEvents).where(and(
+      eq(s.auditEvents.requestId, request.id), eq(s.auditEvents.action, "payment.captured"),
+    ));
+    expect(captured.data).toMatchObject({ via: "paypal_webhook", eventType: "PAYMENT.CAPTURE.COMPLETED" });
+  });
+
+  it("never captures: an approved order PayPal hasn't captured stays unpaid", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("no_change");
+    expect(sandbox.counts.capture).toBe(0);
+    expect(await requestStatus(request.id)).toBe("awaiting_approval");
+  });
+
+  it("records a full refund on the payment and leaves the request's status alone", async () => {
+    const { request, orderId } = await paidRequest();
+    sandbox.refund(orderId);
+
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("refunded");
+    expect((await paymentsFor(request.id))[0].status).toBe("refunded");
+    expect(await requestStatus(request.id)).toBe("paid");
+    expect(await actions(request.id)).toContain("payment.refunded");
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("no_change");
+  });
+
+  it("notes a partial refund in the money trail but keeps the payment captured", async () => {
+    const { request, orderId } = await paidRequest();
+    sandbox.refund(orderId, "partial");
+
+    expect(await handle(refundEvent(`CAP-${orderId}`))).toBe("partially_refunded");
+    expect((await paymentsFor(request.id))[0].status).toBe("captured");
+    expect(await actions(request.id)).toContain("payment.partially_refunded");
+  });
+
+  it("flags a capture PayPal reports for a request that wasn't waiting to be paid", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.completeLater(orderId);
+    await db.update(s.requests).set({ status: "declined" }).where(eq(s.requests.id, request.id));
+
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId))).toBe("unexpected");
+    expect(await requestStatus(request.id)).toBe("declined");
+    expect(await actions(request.id)).toContain("payment.capture_unexpected");
+  });
+
+  it("ignores orders Hakika didn't make and event types it doesn't read, and stores both", async () => {
+    expect(await handle(captureEvent("PAYMENT.CAPTURE.COMPLETED", "SOMEONE-ELSES"))).toBe("unknown_order");
+    expect(await handle({ id: "WH-other", event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "X" } })).toBe("ignored");
+    expect(await handle(refundEvent("NOT-OUR-CAPTURE"))).toBe("ignored");
+    expect(await db.select().from(s.webhookEvents)).toHaveLength(3);
+  });
+
+  it("runs an event again when PayPal retries one that failed half-way", async () => {
+    const { orderId } = await paidRequest();
+    const event = captureEvent("PAYMENT.CAPTURE.COMPLETED", orderId);
+    const getOrder = sandbox.paypal.getOrder;
+    sandbox.paypal.getOrder = async () => { throw new Error("socket hang up"); };
+
+    await expect(handle(event)).rejects.toThrow("socket hang up");
+    sandbox.paypal.getOrder = getOrder;
+    expect(await handle(event)).toBe("confirmed");
+  });
+});
+
+describe("telling the payment steps' caller what was paid", () => {
+  it("reports a payment once, after it is recorded, and not for a pending capture", async () => {
+    const reported: string[][] = [];
+    const withReport = (): PaymentDeps => ({ ...deps(), onPaid: (ids) => { reported.push(ids); } });
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    sandbox.captureWill("PENDING");
+
+    await captureOrderForRequest(db, orderId, withReport());
+    expect(reported).toEqual([]);
+    sandbox.completeLater(orderId);
+    await handlePayPalEvent(db, { id: "WH-paid", event_type: "PAYMENT.CAPTURE.COMPLETED",
+      resource: { id: `CAP-${orderId}`, supplementary_data: { related_ids: { order_id: orderId } } } }, withReport());
+    await captureOrderForRequest(db, orderId, withReport());
+
+    const [payment] = await paymentsFor(request.id);
+    expect(reported).toEqual([[payment.id]]);
+  });
+
+  it("returns the payment result even when reporting fails", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    const outcome = await captureOrderForRequest(db, orderId, { ...deps(), onPaid: () => { throw new Error("Twilio down"); } });
+    expect(outcome).toMatchObject({ ok: true, value: { status: "paid" } });
+  });
+});
+
+describe("WhatsApp confirmations after a supplier is paid", () => {
+  const GRACE_TEST_PHONE = "+15550000103"; // a test phone mapped onto Grace; never a seeded number
+  async function paidPayment() {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+    return (await paymentsFor(request.id))[0];
+  }
+  const sentMessages = () => db.select().from(s.messages).where(eq(s.messages.direction, "outbound")).orderBy(asc(s.messages.createdAt));
+
+  it("sends fixed templates only to mapped test phones, and stores the rest unsent", async () => {
+    const payment = await paidPayment();
+    const send = vi.fn(async () => "SM-1");
+
+    const outcomes = await sendPaymentConfirmations(
+      { db, send, testPhones: new Map([[GRACE_TEST_PHONE, DEMO.contactIds.grace]]) }, payment.id);
+
+    expect(send).toHaveBeenCalledExactlyOnceWith(GRACE_TEST_PHONE,
+      "Hakika: KES 39,500 has been paid to Mlima Hardware through PayPal for a materials order. Please arrange the delivery to the site.");
+    expect(outcomes).toEqual([
+      { contactId: DEMO.contactIds.peter, sent: false, reason: "no_test_phone" },
+      { contactId: DEMO.contactIds.grace, sent: true },
+    ]);
+    const messages = await sentMessages();
+    expect(messages.map((m) => [m.contactId, m.templateKey, m.language, m.twilioSid])).toEqual(expect.arrayContaining([
+      [DEMO.contactIds.peter, "materials_paid_foreman", "sw", null],
+      [DEMO.contactIds.grace, "materials_paid_supplier", "en", "SM-1"],
+    ]));
+    expect(messages.find((m) => m.contactId === DEMO.contactIds.peter)?.body).toContain("Mlima Hardware KES 39,500");
+    const [row] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.action, "payment.confirmations"));
+    expect(row).toMatchObject({ paymentId: payment.id, description: "WhatsApp confirmations of this payment: 1 of 2 sent." });
+  });
+
+  it("records a failed send without stopping the others", async () => {
+    const payment = await paidPayment();
+    const send = vi.fn(async () => { throw new Error("Twilio refused the message"); });
+    const outcomes = await sendPaymentConfirmations({ db, send, testPhones: new Map([
+      ["+15550000101", DEMO.contactIds.peter], [GRACE_TEST_PHONE, DEMO.contactIds.grace],
+    ]) }, payment.id);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(outcomes.map((o) => o.reason)).toEqual(["send_failed", "send_failed"]);
+    expect((await sentMessages()).every((m) => m.twilioSid === null)).toBe(true);
+  });
+
+  it("sends nothing for a payment that isn't captured", async () => {
+    const request = await addRequest();
+    await createOrder(request.id);
+    const [payment] = await paymentsFor(request.id);
+    const send = vi.fn(async () => "SM-1");
+    expect(await sendPaymentConfirmations({ db, send, testPhones: new Map() }, payment.id)).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("the money trail (GET /api/ledger)", () => {
+  it("shows a sandbox payment with its amounts, order ID and capture ID, oldest first", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const captured = rows.find((row) => row.paypalCaptureId === `CAP-${orderId}`);
+    expect(captured).toEqual({
+      at: expect.any(String),
+      kind: "payment",
+      description: "USD 303.89 was paid through PayPal to Mlima Hardware.",
+      amount: { amount: "39500.00", currency: "KES" },
+      amountUsd: { amount: "303.89", currency: "USD" },
+      paypalOrderId: orderId,
+      paypalCaptureId: `CAP-${orderId}`,
+      link: { requestId: request.id },
+    });
+    expect(rows.map((row) => row.at)).toEqual([...rows.map((row) => row.at)].sort());
+    expect(rows.indexOf(rows.find((row) => row.description.startsWith("A PayPal order"))!))
+      .toBeLessThan(rows.indexOf(captured!));
+  });
+
+  it("leaves out milestone events, which the UI contract has no kind for yet", async () => {
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const seeded = await db.select().from(s.auditEvents).where(eq(s.auditEvents.kind, "milestone"));
+    expect(seeded.length).toBeGreaterThan(0);
+    expect(rows.some((row) => seeded.some((event) => event.description === row.description))).toBe(false);
+  });
+
+  it("exports the same rows as CSV", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    sandbox.approve(orderId);
+    await captureOrderForRequest(db, orderId, deps());
+
+    const rows = (await loadLedger(db, DEMO.projectId))!;
+    const lines = ledgerToCsv(rows).trim().split("\r\n");
+    expect(lines).toHaveLength(rows.length + 1);
+    expect(lines.find((line) => line.includes(`CAP-${orderId}`)))
+      .toContain(`payment,USD 303.89 was paid through PayPal to Mlima Hardware.,39500.00,KES,303.89,${orderId},CAP-${orderId},${request.id},`);
+  });
+
+  it("is null for a project that doesn't exist", async () => {
+    expect(await loadLedger(db, "nope")).toBeNull();
   });
 });
