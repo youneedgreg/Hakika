@@ -78,39 +78,39 @@ export const approvalCard: ApprovalCard = {
     {
       itemKey: "cement_50kg", description: "Cement, 50 kg bag",
       qty: 50, unit: "bag",
-      unitPrice: { amount: "950.00", currency: "KES" },
-      referenceUnitPrice: { amount: "780.00", currency: "KES" },
+      unitPrice: { amount: "1300.00", currency: "KES" },
+      referenceUnitPrice: { amount: "1100.00", currency: "KES" },
     },
   ],
-  quotedTotal: { amount: "47500.00", currency: "KES" },
+  quotedTotal: { amount: "65000.00", currency: "KES" },
   recommended: {
-    supplierId: "s-mlima",
-    supplierName: "Mlima Hardware",
-    total: { amount: "39500.00", currency: "KES" },
-    totalUsd: { amount: "305.73", currency: "USD" },
+    supplierId: "s-kiawara",
+    supplierName: "Kiawara Builders Supplies",
+    total: { amount: "55000.00", currency: "KES" },
+    totalUsd: { amount: "425.70", currency: "USD" },
     fxRate: 129.2,
   },
   findings: [
     {
       type: "price_above_market", severity: "warn",
-      message: "Cement is quoted at KES 950 a bag, 22% above the verified median of KES 780.",
-      data: { itemKey: "cement_50kg", quoted: "950.00", median: "780.00", percentAbove: 22 },
+      message: "Cement is quoted at KES 1,300 a bag, 18% above the verified median of KES 1,100.",
+      data: { itemKey: "cement_50kg", quoted: "1300.00", median: "1100.00", percentAbove: 18 },
     },
     {
       type: "unverified_supplier", severity: "warn",
-      message: "Baraka Hardware, on the quote, is not a verified supplier; the cheapest verified alternative is Mlima Hardware at KES 39,500.",
+      message: "Baraka Hardware, on the quote, is not a verified supplier; the cheapest verified alternative is Kiawara Builders Supplies at KES 55,000.",
       data: { supplierName: "Baraka Hardware" },
     },
     {
       type: "cheaper_verified_supplier", severity: "info",
-      message: "Mlima Hardware, a verified supplier, sells the same order for KES 39,500, KES 8,000 less.",
-      data: { supplierId: "s-mlima", total: "39500.00", saving: "8000.00" },
+      message: "Kiawara Builders Supplies, a verified supplier, sells the same order for KES 55,000, KES 10,000 less.",
+      data: { supplierId: "s-kiawara", total: "55000.00", saving: "10000.00" },
     },
   ],
   summary:
-    "Peter asked for 50 bags of cement for the foundation. The quote is 22% above the market median " +
-    "and comes from an unverified supplier. Mlima Hardware, a verified supplier, can supply the same " +
-    "order for KES 39,500 (USD 305.73).",
+    "Peter asked for 50 bags of cement for the foundation. The quote is 18% above the market median " +
+    "and comes from an unverified supplier. Kiawara Builders Supplies, a verified supplier, can supply the same " +
+    "order for KES 55,000 (USD 425.70).",
 };
 
 export const proofReviews: Record<string, ProofReview> = {
@@ -203,7 +203,7 @@ export const overview: ProjectOverview = {
   approvals: [
     {
       requestId: DEMO_REQUEST_ID, title: "50 bags of cement for the foundation",
-      status: "awaiting_approval", total: { amount: "39500.00", currency: "KES" },
+      status: "awaiting_approval", total: { amount: "55000.00", currency: "KES" },
       createdAt: "2026-10-23T08:05:00Z",
     },
   ],
@@ -215,7 +215,7 @@ export const overview: ProjectOverview = {
     },
     {
       id: "a-price-cement", kind: "price_warning", severity: "warn",
-      message: "The cement quote is 22% above the verified median.",
+      message: "The cement quote is 14% above the verified median.",
       link: { requestId: DEMO_REQUEST_ID },
     },
   ],

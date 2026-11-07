@@ -19,7 +19,7 @@ export const HAKIKA_PRICE_SHEET: PriceItem[] = [
     category: "Materials",
     itemName: "Portland Cement (50kg bag)",
     itemNameSw: "Saruji ya Portland (Mfuko wa kilo 50)",
-    vendorName: "Twiga Cement Ltd",
+    vendorName: "Ujenzi Yetu Cement Ltd",
     unit: "Bag",
     unitPriceUSD: 8.50,
     unitPriceKES: 1100,

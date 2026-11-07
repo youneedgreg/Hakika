@@ -266,9 +266,14 @@ describe("missing or inconsistent information", () => {
 describe("the demo story", () => {
   it("matches the numbers on the mock approval card", () => {
     const result = checkPrices(input({
-      lines: [cement(950)],
+      lines: [cement(1300)],
       quotedSupplier: baraka,
-      statedTotalKesCents: 4_750_000,
+      statedTotalKesCents: 6_500_000,
+      references: [{ itemKey: "cement_50kg", unit: "bag", medianKesCents: 110_000 }],
+      verifiedSuppliers: [
+        { id: "s-mlima", name: "Mlima Hardware", prices: [{ itemKey: "cement_50kg", unit: "bag", unitPriceKesCents: 110_000 }] },
+        { id: "s-kiawara", name: "Kiawara Builders Supplies", prices: [{ itemKey: "cement_50kg", unit: "bag", unitPriceKesCents: 110_000 }] },
+      ],
     }));
     const { recommended } = approvalCard;
 
