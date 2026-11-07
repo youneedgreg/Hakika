@@ -1,6 +1,6 @@
 // Fixed messages to people on site. The model never writes free text to a foreman, fundi or supplier.
 // This copy is a placeholder until Juliet's English and Swahili templates arrive; the Swahili of the
-// payment confirmations and the proof messages still needs her check.
+// payment confirmations, the proof messages, the fresh-proof request and labour_paid still needs her check.
 //
 // A {slot} is filled only with values the server takes from the database (an amount, a supplier's
 // name), never with model output or anything a message said.
@@ -47,6 +47,22 @@ const TEMPLATES = {
   no_proof_due: {
     en: "Hakika: there is no delivery waiting for proof right now.",
     sw: "Hakika: hakuna mzigo unaosubiri uthibitisho kwa sasa.",
+  },
+  // A DONE reply when no milestone is in progress.
+  no_milestone_due: {
+    en: "Hakika: there is no work waiting for proof right now.",
+    sw: "Hakika: hakuna kazi inayosubiri uthibitisho kwa sasa.",
+  },
+  // A new code after a proof photo could not be confirmed. Neutral on purpose: it says what is
+  // needed, never why the last photo failed, and never accuses anyone.
+  fresh_proof_request: {
+    en: "Hakika: we need a new proof photo for {milestone}. Your new code is {code}. Write it on paper, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
+    sw: "Hakika: tunahitaji picha mpya ya uthibitisho kwa {milestone}. Nambari yako mpya ni {code}. Iandike kwenye karatasi, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa, kisha tuma mahali ulipo (location).",
+  },
+  // To the fundi, once the owner has paid their labour for a verified milestone.
+  labour_paid: {
+    en: "Hakika: the owner has paid you {amount} through PayPal for {milestone}. Thank you.",
+    sw: "Hakika: mwenye nyumba amekulipa {amount} kupitia PayPal kwa {milestone}. Asante.",
   },
 } as const satisfies Record<string, Record<Language, string>>;
 

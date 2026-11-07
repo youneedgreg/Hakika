@@ -466,11 +466,12 @@ describe("what a verdict changes (Day 12)", () => {
   });
 
   it("doesn't move a milestone that isn't waiting for proof", async () => {
+    // m3 hasn't started, so a code for it doesn't make it wait for proof, and its verdict moves nothing.
     const code = await issueProofRequest({ db, now: at(0) }, {
-      projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter, purpose: "progress",
+      projectId: DEMO.projectId, milestoneId: "m3", contactId: DEMO.contactIds.peter, purpose: "progress",
     });
     await upload(5, code.token, await photo(1), FAR_AWAY, fakeVision(({ code }) => sees({ code })));
-    expect(await milestoneStatus()).toBe("in_progress");
+    expect((await db.select().from(s.milestones).where(eq(s.milestones.id, "m3")))[0].status).toBe("planned");
     expect((await verdictAudits())[0].data).toMatchObject({ outcome: "suspicious", milestoneStatus: null });
   });
 });

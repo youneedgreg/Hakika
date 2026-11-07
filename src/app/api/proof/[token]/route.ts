@@ -10,7 +10,7 @@ import { apiError, mockJson, notFound } from "@/server/http";
 import { DEMO_PROOF_TOKEN, proofCapture } from "@/server/mocks/demo";
 import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
 import { isWellFormedToken } from "@/server/proofs/codes";
-import { liveProofVision } from "@/server/proofs/live";
+import { liveFreshProof, liveProofVision } from "@/server/proofs/live";
 import { captureView, type LinkProblem } from "@/server/proofs/requests";
 import { proofFieldsSchema } from "@/server/schemas";
 import { describeError } from "@/server/whatsapp/intake";
@@ -22,7 +22,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "ima
 function linkProblem(problem: LinkProblem): Response {
   if (problem === "used") return apiError(410, "proof_link_used", "This proof link has already been used.");
   if (problem === "expired") {
-    return apiError(410, "proof_link_expired", "This proof link has expired. Reply PROOF on WhatsApp for a new code.");
+    return apiError(410, "proof_link_expired", "This proof link has expired. Reply PROOF (or DONE for finished work) on WhatsApp for a new code.");
   }
   return notFound("Proof link");
 }
@@ -31,6 +31,7 @@ function captureDeps(): CaptureDeps {
   return {
     db: getDb(),
     vision: liveProofVision(),
+    fresh: liveFreshProof("whatsapp"),
     storeFile: async (path, file) => {
       const blob = await put(path, Buffer.from(file.bytes), { access: "private", contentType: file.contentType });
       return blob.pathname;

@@ -41,6 +41,11 @@ describe("request machine", () => {
     expect(requestMachine.transition("held", "owner_overrode")).toBe("verified");
   });
 
+  it("lets the owner accept a proof that only needs a fresh photo", () => {
+    expect(walk(requestMachine, "awaiting_proof", ["proof_needs_fresh", "owner_overrode"]))
+      .toEqual(["awaiting_proof", "awaiting_proof", "verified"]);
+  });
+
   it("sends a failed capture back for approval instead of marking it paid", () => {
     expect(requestMachine.transition("approved", "capture_failed")).toBe("awaiting_approval");
   });
@@ -53,7 +58,7 @@ describe("request machine", () => {
     ["checked", "owner_approved"], // the owner sees the card before approving
     ["paid", "owner_declined"],
     ["verified", "proof_suspicious"],
-    ["awaiting_proof", "owner_overrode"], // overrides are for held requests only
+    ["paid", "owner_overrode"], // an override answers a proof's verdict, so a proof must be due
   ] as const)("refuses %s → %s", (from, event) => {
     expect(requestMachine.can(from, event)).toBe(false);
     expect(() => requestMachine.transition(from, event)).toThrow(InvalidTransition);
@@ -73,6 +78,13 @@ describe("milestone machine", () => {
     expect(walk(milestoneMachine, "in_progress", [
       "proof_requested", "proof_suspicious", "proof_needs_fresh", "proof_verified", "labour_paid",
     ])).toEqual(["in_progress", "awaiting_proof", "held", "held", "verified", "paid"]);
+  });
+
+  it("lets the owner override a held milestone or one waiting on a fresh photo, and nothing earlier", () => {
+    expect(milestoneMachine.transition("held", "owner_overrode")).toBe("verified");
+    expect(milestoneMachine.transition("awaiting_proof", "owner_overrode")).toBe("verified");
+    expect(milestoneMachine.can("in_progress", "owner_overrode")).toBe(false);
+    expect(milestoneMachine.can("planned", "owner_overrode")).toBe(false);
   });
 
   it("pays labour only from verified", () => {

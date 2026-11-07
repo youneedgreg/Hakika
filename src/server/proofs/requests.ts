@@ -3,15 +3,17 @@
 //
 // A proof is stored here with its location and times; whether it passes is the verification
 // engine's job (Day 11), so nothing in this file moves a request or milestone past awaiting_proof.
+// A fresh code after a failed photo (Day 13) is issued here too, by fresh.ts.
 
 import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import type { ProofVision } from "@/server/ai/proof-vision";
+import type { FreshProofDeps } from "./fresh";
 import type { ProofCapture } from "@/shared/api";
 import type { AnyDb } from "@/server/db/client";
 import type { PROOF_PURPOSES, PROOF_SOURCES } from "@/server/db/enums";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
-import { proofRequestMachine, requestMachine } from "@/server/state/machines";
+import { milestoneMachine, proofRequestMachine, requestMachine } from "@/server/state/machines";
 import { generateCode, generateToken, hashToken, isWellFormedToken, PROOF_LINK_TTL_MS } from "./codes";
 
 type Purpose = (typeof PROOF_PURPOSES)[number];
@@ -21,22 +23,51 @@ type Contact = typeof s.siteContacts.$inferSelect;
 type Tx = Parameters<Parameters<AnyDb["transaction"]>[0]>[0];
 
 // `vision` is how a proof photo is inspected. Without it, the code and vision checks stay unknown.
-export type ProofDeps = { db: AnyDb; now?: () => Date; vision?: ProofVision };
+// `fresh` is how a new code reaches someone on site after a photo fails; without it none is sent.
+export type ProofDeps = { db: AnyDb; now?: () => Date; vision?: ProofVision; fresh?: FreshProofDeps };
 const clock = (deps: ProofDeps) => (deps.now ?? (() => new Date()))();
 
 export type IssuedProofRequest = { id: string; code: string; token: string; expiresAt: Date; milestoneName: string };
 
-// Issues a new code and link. Any other open request for the same delivery (or, for progress, the
-// same milestone) is superseded, so only the newest link works. The token is returned once, to be
-// sent; only its hash is stored.
-export async function issueProofRequest(deps: ProofDeps, input: {
+type IssueInput = {
   projectId: string;
   milestoneId: string;
   purpose: Purpose;
   paymentId?: string | null;
   contactId?: string | null;
   replacesId?: string | null;
-}): Promise<IssuedProofRequest> {
+};
+
+// Issues a new code and link. Any other open request for the same delivery (or, for progress, the
+// same milestone) is superseded, so only the newest link works. The token is returned once, to be
+// sent; only its hash is stored. A progress code moves its milestone to awaiting_proof.
+export async function issueProofRequest(deps: ProofDeps, input: IssueInput): Promise<IssuedProofRequest> {
+  return (await issue(deps, input, null))!;
+}
+
+// A fresh code for a proof whose photo could not be confirmed, replacing that proof's request.
+// Null when a newer request for the same target exists already (someone asked again, or a check
+// of the same proof running alongside this one got there first), so one failed photo brings one
+// new code.
+export async function issueFreshProofRequest(deps: ProofDeps, replaced: ProofRequest): Promise<IssuedProofRequest | null> {
+  return issue(deps, {
+    projectId: replaced.projectId,
+    milestoneId: replaced.milestoneId,
+    purpose: replaced.purpose,
+    paymentId: replaced.paymentId,
+    contactId: replaced.contactId,
+    replacesId: replaced.id,
+  }, replaced);
+}
+
+// Requests for the same delivery, or for a milestone's own progress.
+export function sameProofTarget(target: { paymentId?: string | null; milestoneId: string }) {
+  return target.paymentId
+    ? eq(s.proofRequests.paymentId, target.paymentId)
+    : and(eq(s.proofRequests.milestoneId, target.milestoneId), isNull(s.proofRequests.paymentId));
+}
+
+async function issue(deps: ProofDeps, input: IssueInput, fresh: ProofRequest | null): Promise<IssuedProofRequest | null> {
   const issuedAt = clock(deps);
   const expiresAt = new Date(issuedAt.getTime() + PROOF_LINK_TTL_MS);
   const token = generateToken();
@@ -46,11 +77,16 @@ export async function issueProofRequest(deps: ProofDeps, input: {
     const [milestone] = await tx.select().from(s.milestones).where(eq(s.milestones.id, input.milestoneId));
     if (!milestone || milestone.projectId !== input.projectId) throw new Error("The milestone is not on this project.");
 
-    const sameTarget = input.paymentId
-      ? eq(s.proofRequests.paymentId, input.paymentId)
-      : and(eq(s.proofRequests.milestoneId, input.milestoneId), isNull(s.proofRequests.paymentId));
+    const sameTarget = and(sameProofTarget(input), eq(s.proofRequests.purpose, input.purpose));
+    if (fresh) {
+      // Holding the replaced request's row puts two fresh requests for it one after the other.
+      await tx.select({ id: s.proofRequests.id }).from(s.proofRequests).where(eq(s.proofRequests.id, fresh.id)).for("update");
+      const [newer] = await tx.select({ id: s.proofRequests.id }).from(s.proofRequests)
+        .where(and(sameTarget, gt(s.proofRequests.issuedAt, fresh.issuedAt))).limit(1);
+      if (newer) return null;
+    }
     const open = await tx.select().from(s.proofRequests)
-      .where(and(sameTarget, eq(s.proofRequests.purpose, input.purpose), eq(s.proofRequests.status, "issued")))
+      .where(and(sameTarget, eq(s.proofRequests.status, "issued")))
       .for("update");
     for (const old of open) {
       await tx.update(s.proofRequests).set({ status: proofRequestMachine.transition(old.status, "superseded") })
@@ -84,14 +120,22 @@ export async function issueProofRequest(deps: ProofDeps, input: {
       }
     }
 
+    if (input.purpose === "progress" && milestoneMachine.can(milestone.status, "proof_requested")) {
+      await tx.update(s.milestones).set({ status: milestoneMachine.transition(milestone.status, "proof_requested") })
+        .where(eq(s.milestones.id, milestone.id));
+    }
+
     const contact = input.contactId
       ? (await tx.select().from(s.siteContacts).where(eq(s.siteContacts.id, input.contactId)))[0]
       : undefined;
+    const to = contact ? ` to ${contact.name}` : "";
     await tx.insert(s.auditEvents).values({
       projectId: input.projectId,
       kind: "proof",
-      action: open.length ? "proof.reissued" : "proof.requested",
-      description: `Proof code ${code} sent${contact ? ` to ${contact.name}` : ""} for ${milestone.name}; it expires in 30 minutes.`,
+      action: fresh ? "proof.fresh_requested" : open.length ? "proof.reissued" : "proof.requested",
+      description: fresh
+        ? `Fresh proof code ${code} sent${to} for ${milestone.name}, because the last photo could not be confirmed; it expires in 30 minutes.`
+        : `Proof code ${code} sent${to} for ${milestone.name}; it expires in 30 minutes.`,
       actor: "system",
       requestId,
       paymentId: input.paymentId ?? null,
@@ -132,6 +176,15 @@ export async function findDeliveryDue(db: AnyDb, contact: Contact) {
     return { ...candidate, milestoneId: candidate.milestoneId };
   }
   return null;
+}
+
+// The milestone a foreman's DONE reply is about: the first on their project, in plan order, whose
+// work is in progress or still waiting on an accepted proof. Null when there is none.
+export async function findMilestoneDue(db: AnyDb, contact: Contact) {
+  const [milestone] = await db.select({ id: s.milestones.id }).from(s.milestones)
+    .where(and(eq(s.milestones.projectId, contact.projectId), inArray(s.milestones.status, ["in_progress", "awaiting_proof", "held"])))
+    .orderBy(s.milestones.position).limit(1);
+  return milestone ? { milestoneId: milestone.id } : null;
 }
 
 // The open request a WhatsApp photo from this contact would answer, if any.

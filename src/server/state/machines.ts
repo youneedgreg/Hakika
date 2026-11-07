@@ -28,8 +28,9 @@ export const requestMachine = defineMachine<RequestState, RequestEvent>("request
   // The owner approved in PayPal; the server is capturing. A failed capture goes back for another try.
   approved: { captured: "paid", capture_failed: "awaiting_approval" },
   paid: { proof_requested: "awaiting_proof" },
+  // A proof that needs a fresh photo leaves the request waiting; the owner may still accept it.
   awaiting_proof: {
-    proof_verified: "verified", proof_needs_fresh: "awaiting_proof", proof_suspicious: "held",
+    proof_verified: "verified", proof_needs_fresh: "awaiting_proof", proof_suspicious: "held", owner_overrode: "verified",
   },
   held: {
     proof_verified: "verified", proof_needs_fresh: "held", proof_suspicious: "held", owner_overrode: "verified",
@@ -46,7 +47,7 @@ export const milestoneMachine = defineMachine<MilestoneState, MilestoneEvent>("m
   planned: { started: "in_progress" },
   in_progress: { proof_requested: "awaiting_proof" },
   awaiting_proof: {
-    proof_verified: "verified", proof_needs_fresh: "awaiting_proof", proof_suspicious: "held",
+    proof_verified: "verified", proof_needs_fresh: "awaiting_proof", proof_suspicious: "held", owner_overrode: "verified",
   },
   held: {
     proof_verified: "verified", proof_needs_fresh: "held", proof_suspicious: "held", owner_overrode: "verified",

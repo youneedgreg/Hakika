@@ -4,11 +4,12 @@
 
 import { eq } from "drizzle-orm";
 import type { ProofVision } from "@/server/ai/proof-vision";
+import type { FreshProofDeps } from "@/server/proofs/fresh";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
-import { isProofKeyword } from "@/server/proofs/codes";
-import { answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
+import { isDoneKeyword, isProofKeyword } from "@/server/proofs/codes";
+import { answerDoneKeyword, answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
 import type { MediaFile } from "./media";
 import { renderTemplate, type PlainTemplateKey } from "./templates";
 
@@ -19,6 +20,7 @@ export type IntakeDeps = {
   send: (to: string, body: string) => Promise<string>;
   afterReply?: (stored: StoredInbound) => Promise<void>; // the slow reading work, once the message is safe and answered
   vision?: ProofVision; // inspects proof photos; without it their vision checks stay unknown
+  fresh?: FreshProofDeps; // sends a new code when a proof photo isn't confirmed
 };
 
 export type StoredInbound = {
@@ -98,6 +100,10 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
   // the vision model only reports what it sees; it is never read as a quote or a request.
   if (!message.unsupported && message.kind === "text" && isProofKeyword(message.text)) {
     await answerProofKeyword(deps, contact, message);
+    return stored.id;
+  }
+  if (!message.unsupported && message.kind === "text" && isDoneKeyword(message.text)) {
+    await answerDoneKeyword(deps, contact, message);
     return stored.id;
   }
   if (!message.unsupported && message.kind === "image" && file) {

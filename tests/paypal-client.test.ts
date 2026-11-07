@@ -26,7 +26,7 @@ function fakePayPal(answer: (call: Call) => Response) {
 const header = (call: Call, name: string) => (call.init.headers as Record<string, string>)[name];
 
 const order: NewOrder = {
-  requestId: "req_1",
+  referenceId: "req_1",
   paymentId: "pay_1",
   payeeEmail: "mlima@business.example.com",
   usdAmount: "303.89",

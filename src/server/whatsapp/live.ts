@@ -6,7 +6,7 @@ import { parseMessage } from "@/server/ai/parse-message";
 import { readQuote } from "@/server/ai/quote";
 import { translateVoiceNote } from "@/server/ai/translate";
 import { getDb } from "@/server/db/client";
-import { liveProofVision } from "@/server/proofs/live";
+import { liveFreshProof, liveProofVision } from "@/server/proofs/live";
 import { runRequestPipeline } from "@/server/requests/pipeline";
 import type { IntakeDeps } from "./intake";
 import { fetchOwnMedia, type MediaFile } from "./media";
@@ -24,6 +24,7 @@ export function twilioDeps(): IntakeDeps {
     storeMedia,
     send: sendWhatsApp,
     vision: liveProofVision(),
+    fresh: liveFreshProof("whatsapp"),
     afterReply: (stored) => runRequestPipeline(deps, { translate: translateVoiceNote, readQuote, parseMessage, explainFindings }, stored),
   };
   return deps;
@@ -37,5 +38,6 @@ export function simulatorDeps(): IntakeDeps {
     loadMedia: fetchOwnMedia,
     storeMedia,
     send: () => Promise.reject(new Error("Judge Mode never sends real WhatsApp messages.")),
+    fresh: liveFreshProof("simulator"),
   };
 }

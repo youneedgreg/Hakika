@@ -155,7 +155,7 @@ describe("creating the PayPal order", () => {
 
     const sent = sandbox.orders.get(orderId)!.body;
     expect(sent).toMatchObject({
-      requestId: request.id,
+      referenceId: request.id,
       payeeEmail: MLIMA_EMAIL,
       usdAmount: "303.89",
       returnUrl: `https://tryhakika.vercel.app/requests/${request.id}?paypal=approved`,

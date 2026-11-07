@@ -1,4 +1,4 @@
-// Proof over WhatsApp: the PROOF reply that issues a code, and the fallback for people who can't
+// Proof over WhatsApp: the PROOF (delivery) and DONE (milestone) replies that issue a code, and the fallback for people who can't
 // open the link (a photo sent in the chat while their code is open, plus a shared location pin).
 
 import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
@@ -8,7 +8,7 @@ import type { InboundMessage, IntakeDeps } from "@/server/whatsapp/intake";
 import type { MediaFile } from "@/server/whatsapp/media";
 import { renderTemplate } from "@/server/whatsapp/templates";
 import { dHash, UnreadableImage } from "./dhash";
-import { findDeliveryDue, issueProofRequest, openProofRequestFor, recordProof, type ProofDeps } from "./requests";
+import { findDeliveryDue, findMilestoneDue, issueProofRequest, openProofRequestFor, recordProof, type ProofDeps } from "./requests";
 import { verifyStoredProof } from "./verdicts";
 
 type Contact = typeof s.siteContacts.$inferSelect;
@@ -30,20 +30,42 @@ export type KeywordDeps = Pick<IntakeDeps, "db" | "send"> & ProofDeps & { linkBa
 // no_proof_due. Only foremen get codes; anyone else gets no_proof_due.
 export async function answerProofKeyword(deps: KeywordDeps, contact: Contact, message: InboundMessage): Promise<void> {
   const due = contact.role === "foreman" ? await findDeliveryDue(deps.db, contact) : null;
-  const linkBase = deps.linkBase ?? proofLinkBase();
-  if (!due || !linkBase) {
-    if (due && !linkBase) console.error("No proof link base URL: set PROOF_LINK_BASE_URL.");
-    await reply(deps, contact, message, "no_proof_due", renderTemplate("no_proof_due", contact.language));
-    return;
-  }
-
-  const issued = await issueProofRequest(deps, {
+  await answerWithCode(deps, contact, message, "no_proof_due", due && {
     projectId: contact.projectId,
     milestoneId: due.milestoneId,
     paymentId: due.paymentId,
     contactId: contact.id,
     purpose: "delivery",
   });
+}
+
+// Answers a foreman's DONE reply: a code and link to prove the milestone in progress, or
+// no_milestone_due. Only foremen get codes.
+export async function answerDoneKeyword(deps: KeywordDeps, contact: Contact, message: InboundMessage): Promise<void> {
+  const due = contact.role === "foreman" ? await findMilestoneDue(deps.db, contact) : null;
+  await answerWithCode(deps, contact, message, "no_milestone_due", due && {
+    projectId: contact.projectId,
+    milestoneId: due.milestoneId,
+    contactId: contact.id,
+    purpose: "progress",
+  });
+}
+
+async function answerWithCode(
+  deps: KeywordDeps,
+  contact: Contact,
+  message: InboundMessage,
+  nothingDue: "no_proof_due" | "no_milestone_due",
+  input: Parameters<typeof issueProofRequest>[1] | null,
+): Promise<void> {
+  const linkBase = deps.linkBase ?? proofLinkBase();
+  if (!input || !linkBase) {
+    if (input && !linkBase) console.error("No proof link base URL: set PROOF_LINK_BASE_URL.");
+    await reply(deps, contact, message, nothingDue, renderTemplate(nothingDue, contact.language));
+    return;
+  }
+
+  const issued = await issueProofRequest(deps, input);
   const link = `${linkBase}/proof/${issued.token}`;
   const params = { milestone: issued.milestoneName, code: issued.code };
   const body = renderTemplate("proof_request", contact.language, { ...params, link });
