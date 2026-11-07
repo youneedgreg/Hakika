@@ -2,7 +2,7 @@
 // photos are kept in, and WhatsApp for fresh-proof codes. Tests pass fakes instead.
 
 import { get } from "@vercel/blob";
-import { inspectProof, type ProofVision, shrinkForModel } from "@/server/ai/proof-vision";
+import { inspectProof, type ProofPhoto, type ProofVision, shrinkForModel } from "@/server/ai/proof-vision";
 import { parseTestPhones } from "@/server/whatsapp/intake";
 import { sendWhatsApp } from "@/server/whatsapp/twilio";
 import type { FreshProofDeps } from "./fresh";
@@ -13,15 +13,14 @@ import { proofLinkBase } from "./whatsapp";
 export function liveProofVision(): ProofVision | undefined {
   const modelId = process.env.BEDROCK_MODEL_ID;
   if (!modelId) return undefined;
-  return {
-    modelId,
-    inspect: (photo, input) => inspectProof(photo, input),
-    readPhoto: async (blobPath) => {
-      const blob = await get(blobPath, { access: "private" });
-      if (blob?.statusCode !== 200 || !blob.stream) return null;
-      return shrinkForModel(new Uint8Array(await new Response(blob.stream).arrayBuffer()));
-    },
-  };
+  return { modelId, inspect: (photo, input) => inspectProof(photo, input), readPhoto: readStoredPhoto };
+}
+
+// A stored proof photo from Blob, shrunk for the model. Null when it isn't stored.
+export async function readStoredPhoto(blobPath: string): Promise<ProofPhoto | null> {
+  const blob = await get(blobPath, { access: "private" });
+  if (blob?.statusCode !== 200 || !blob.stream) return null;
+  return shrinkForModel(new Uint8Array(await new Response(blob.stream).arrayBuffer()));
 }
 
 // How fresh-proof codes go out from a route. Twilio and the capture page send to mapped test phones;

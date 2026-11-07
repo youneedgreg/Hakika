@@ -103,6 +103,52 @@ export type SimulateBody = {
 };
 export type SimulateResult = { messageId: string; accepted: true };
 
-// POST /api/judge/reset
+// POST /api/judge/reset — 429 `reset_too_soon` within RESET_COOLDOWN_S of the last reset, because
+// every judge shares the one demo project.
 export type ResetBody = { projectId: string };
 export type ResetResult = { projectId: string; reset: true };
+
+// POST /api/judge/scenarios/[id] — runs one scenario on the server and answers when it has finished.
+// Each scenario first puts in place what it needs (listed in `setup`), so they run in any order.
+export type ScenarioId = "inflated-quote" | "valid-delivery" | "recycled-photo";
+export type RunScenarioBody = { projectId: string };
+
+// Where a model's answer came from. Judge Mode never calls a model: "recorded" is Nova's answer from
+// one real run on the same test file, replayed; "none" means no recording fitted, so the pipeline
+// went on without it (the code-written summary, or vision checks left unknown). Show this on screen.
+export type ModelOutputNote = {
+  task: "quote_reading" | "owner_summary" | "proof_inspection";
+  source: "recorded" | "none";
+  modelId: string | null;
+  recordedAt: string | null;
+  detail: string; // one sentence, shown as written
+};
+
+export type ScenarioResult = {
+  scenarioId: ScenarioId;
+  title: string;
+  outcome: string; // one or two sentences on what happened, shown as written
+  setup: string[]; // what was put in place before the messages were sent, shown as written
+  models: ModelOutputNote[];
+  links: { label: string; href: string }[]; // the records to open next
+  requestId?: string;
+  proofId?: string;
+  milestoneId?: string;
+  verdict?: ProofReview["outcome"];
+  messageIds: string[]; // the simulated messages sent, in order
+};
+
+// GET /api/judge/chat?projectId=…&after=<ISO time> — the simulator's conversation, oldest first:
+// what each site contact "sent" and what Hakika answered (never sent to a phone).
+export type JudgeChatMessage = {
+  id: string;
+  at: string;
+  direction: "inbound" | "outbound";
+  contact: { id: string; name: string; role: "foreman" | "fundi" | "supplier" } | null;
+  kind: "text" | "image" | "voice" | "location" | "template";
+  text: string | null;
+  imageUrl?: string; // /api/judge/messages/[id]/image
+  location?: { lat: number; lng: number };
+  templateKey?: string;
+};
+export type JudgeChatResult = { projectId: string; messages: JudgeChatMessage[] };

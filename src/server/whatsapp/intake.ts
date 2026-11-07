@@ -21,6 +21,8 @@ export type IntakeDeps = {
   afterReply?: (stored: StoredInbound) => Promise<void>; // the slow reading work, once the message is safe and answered
   vision?: ProofVision; // inspects proof photos; without it their vision checks stay unknown
   fresh?: FreshProofDeps; // sends a new code when a proof photo isn't confirmed
+  linkBase?: string; // where proof links point; defaults to proofLinkBase()
+  newCode?: () => string | undefined; // Judge Mode's fixed delivery code; otherwise codes are random
 };
 
 export type StoredInbound = {

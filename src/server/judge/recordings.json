@@ -1,0 +1,114 @@
+{
+  "modelId": "eu.amazon.nova-2-lite-v1:0",
+  "recordedAt": "2026-11-07T14:58:59.570Z",
+  "quote": {
+    "media": "judge/quote-baraka.jpg",
+    "sha256": "04889a1637de2f146e8e7655c4e10e0f06547da7719e54fbfe23e7b995693bed",
+    "output": {
+      "outcome": "read",
+      "supplierName": "BARAKA HARDWARE",
+      "lines": [
+        {
+          "itemKey": "cement_50kg",
+          "description": "Cement 50kg bag",
+          "qty": 50,
+          "unit": "bag",
+          "unitPriceKesCents": 130000
+        }
+      ],
+      "statedTotalKesCents": 6500000,
+      "raw": {
+        "allText": "BARAKA HARDWARE\nKaratina Road, Nyeri town\nQUOTATION\nNo. 0417\nTo: Peter Mwangi, Nyeri site\nDate: 05/11/2026\nItem\nQty\nPrice\nAmount\nCement 50kg bag\n50\n1,300\n65,000\nTOTAL KES\n65,000\nPrices valid for 7 days. Delivery to site included.\nThank you for your business.\nFictional business. Sample quote for Hakika Judge Mode.",
+        "supplierName": "BARAKA HARDWARE",
+        "lines": [
+          {
+            "itemKey": "cement_50kg",
+            "description": "Cement 50kg bag",
+            "qty": 50,
+            "unit": null,
+            "unitPriceKes": 1300,
+            "lineTotalKes": 65000
+          }
+        ],
+        "statedTotalKes": 65000
+      },
+      "usage": {
+        "inputTokens": 1620,
+        "outputTokens": 218
+      }
+    }
+  },
+  "summary": null,
+  "inspections": [
+    {
+      "media": "judge/delivery-cement-coded.jpg",
+      "dhash": "763f1f1c0e0d3999",
+      "earlierPhotos": 0,
+      "output": {
+        "outcome": "inspected",
+        "reading": {
+          "code": "K7P3",
+          "medium": "scene",
+          "mediumReason": "The image shows a real outdoor scene with a stack of bags on a pallet and a construction site in the background.",
+          "itemsSeen": [
+            {
+              "itemKey": "cement_50kg",
+              "description": "Large beige bags stacked on a wooden pallet, likely containing cement.",
+              "qty": 12
+            }
+          ],
+          "sameSite": null,
+          "sameSiteReason": null
+        },
+        "raw": {
+          "allText": "K7P3",
+          "codeSeen": "K7P3",
+          "medium": "scene",
+          "mediumReason": "The image shows a real outdoor scene with a stack of bags on a pallet and a construction site in the background.",
+          "itemsSeen": [
+            {
+              "itemKey": "cement_50kg",
+              "description": "Large beige bags stacked on a wooden pallet, likely containing cement.",
+              "approxQty": 12
+            }
+          ],
+          "sameSite": null,
+          "sameSiteReason": "There are no earlier site photos to compare with."
+        },
+        "usage": {
+          "inputTokens": 1697,
+          "outputTokens": 158
+        }
+      }
+    },
+    {
+      "media": "mock/proof/proof-foundation-recycled.png",
+      "dhash": "8fcdd943c6cca9f1",
+      "earlierPhotos": 1,
+      "output": {
+        "outcome": "inspected",
+        "reading": {
+          "code": null,
+          "medium": "scene",
+          "mediumReason": "The photo shows a construction site with stone walls, wooden forms, and rebar, indicating a building under construction.",
+          "itemsSeen": [],
+          "sameSite": "same",
+          "sameSiteReason": "The layout, stone walls, wooden forms, and surrounding landscape match the earlier proof, confirming it's the same site."
+        },
+        "raw": {
+          "allText": "",
+          "codeSeen": null,
+          "medium": "scene",
+          "mediumReason": "The photo shows a construction site with stone walls, wooden forms, and rebar, indicating a building under construction.",
+          "itemsSeen": [],
+          "sameSite": "same",
+          "sameSiteReason": "The layout, stone walls, wooden forms, and surrounding landscape match the earlier proof, confirming it's the same site."
+        },
+        "usage": {
+          "inputTokens": 1927,
+          "outputTokens": 132
+        }
+      }
+    }
+  ]
+}

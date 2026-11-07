@@ -12,7 +12,7 @@ import type { IntakeDeps } from "./intake";
 import { fetchOwnMedia, type MediaFile } from "./media";
 import { fetchTwilioMedia, sendWhatsApp } from "./twilio";
 
-async function storeMedia(path: string, file: MediaFile): Promise<string> {
+export async function storeMedia(path: string, file: MediaFile): Promise<string> {
   const blob = await put(path, Buffer.from(file.bytes), { access: "private", contentType: file.contentType });
   return blob.pathname;
 }

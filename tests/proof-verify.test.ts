@@ -202,18 +202,27 @@ describe("vision checks (Day 12)", () => {
       .toMatchObject({ result: "pass", detail: "Shows Cement, 50 kg bag (about 48 of 50)." });
   });
 
-  it("fails a delivery that's missing an item or clearly short", () => {
-    const short = [{ itemKey: "cement_50kg", description: "bags", qty: 50 * MIN_SHARE_SEEN - 1 }];
-    expect(visionChecks(inspected({ itemsSeen: short }), delivery)[1])
-      .toMatchObject({ result: "fail", detail: "Fewer than half of what was paid for: Cement, 50 kg bag (about 24 of 50)." });
+  it("fails a delivery photo that doesn't show an item paid for", () => {
     const other = [{ itemKey: null, description: "timber", qty: 10 }];
     expect(visionChecks(inspected({ itemsSeen: other }), delivery)[1])
       .toMatchObject({ result: "fail", detail: "Not seen in the photo: Cement, 50 kg bag." });
   });
 
-  it("is unknown when the items can't be counted or nothing was paid for", () => {
+  // Nova counted about 12 of some 30 bags in view on a real run: a low count is a note, not a fail.
+  it("passes a low count with a note to check the delivery note", () => {
+    const low = [{ itemKey: "cement_50kg", description: "bags", qty: 50 * MIN_SHARE_SEEN - 1 }];
+    expect(visionChecks(inspected({ itemsSeen: low }), delivery)[1]).toMatchObject({
+      result: "pass",
+      detail: "Shows Cement, 50 kg bag (about 24 of 50). Fewer than half of what was paid for were counted, but stacked goods can't be counted from one photo: check the delivery note.",
+    });
+  });
+
+  it("passes items seen but not counted with a note, and is unknown when nothing was paid for", () => {
     const uncounted = [{ itemKey: "cement_50kg", description: "bags", qty: null }];
-    expect(visionChecks(inspected({ itemsSeen: uncounted }), delivery)[1]).toMatchObject({ result: "unknown" });
+    expect(visionChecks(inspected({ itemsSeen: uncounted }), delivery)[1]).toMatchObject({
+      result: "pass",
+      detail: "Shows Cement, 50 kg bag (not counted). Stacked goods can't always be counted from one photo: check the delivery note.",
+    });
     expect(visionChecks(inspected(), { purpose: "delivery", expected: [] })[1]).toMatchObject({ result: "unknown" });
   });
 
