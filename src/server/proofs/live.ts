@@ -1,8 +1,12 @@
-// Proof inspection's real connections, for the API routes: Nova on Bedrock, and the private Blob
-// store the photos are kept in. Tests pass fakes instead.
+// Proof checking's real connections, for the API routes: Nova on Bedrock, the private Blob store the
+// photos are kept in, and WhatsApp for fresh-proof codes. Tests pass fakes instead.
 
 import { get } from "@vercel/blob";
 import { inspectProof, type ProofVision, shrinkForModel } from "@/server/ai/proof-vision";
+import { parseTestPhones } from "@/server/whatsapp/intake";
+import { sendWhatsApp } from "@/server/whatsapp/twilio";
+import type { FreshProofDeps } from "./fresh";
+import { proofLinkBase } from "./whatsapp";
 
 // Undefined when Bedrock isn't configured, so proofs are still checked, with the code and vision
 // checks left unknown.
@@ -17,5 +21,18 @@ export function liveProofVision(): ProofVision | undefined {
       if (blob?.statusCode !== 200 || !blob.stream) return null;
       return shrinkForModel(new Uint8Array(await new Response(blob.stream).arrayBuffer()));
     },
+  };
+}
+
+// How fresh-proof codes go out from a route. Twilio and the capture page send to mapped test phones;
+// Judge Mode stores them on the simulator channel and never sends.
+export function liveFreshProof(channel: "whatsapp" | "simulator"): FreshProofDeps {
+  return {
+    notifier: {
+      channel,
+      send: channel === "whatsapp" ? sendWhatsApp : () => Promise.reject(new Error("Judge Mode never sends real WhatsApp messages.")),
+      testPhones: parseTestPhones(process.env.WHATSAPP_TEST_PHONES),
+    },
+    linkBase: proofLinkBase(),
   };
 }

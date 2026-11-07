@@ -3,13 +3,14 @@
 // The photo is inspected by the vision model once, before the proof's row is locked (a model call
 // takes seconds), and the answer is stored with the verdict. A recheck (a WhatsApp location pin
 // arriving after the photo) reuses it. An overridden verdict is final. The outcome moves the
-// proven request or milestone (holds.ts); fresh-proof requests come on Day 13.
+// proven request or milestone (holds.ts); a photo that was not confirmed brings a fresh code (fresh.ts).
 
 import { and, desc, eq, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { type ExpectedItem, MAX_EARLIER_PHOTOS, type ProofInspection, type ProofPhoto } from "@/server/ai/proof-vision";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
 import type { ProofCheck } from "@/shared/types";
+import { requestFreshProof } from "./fresh";
 import { applyVerdict, type VerdictEffects } from "./holds";
 import type { ProofDeps } from "./requests";
 import {
@@ -191,11 +192,21 @@ async function expectedItems(db: Reader, request: ProofRequest): Promise<Expecte
 
 // For callers that have already stored the photo: a failed check is logged, not thrown, so the
 // person on site still gets their "photo received" answer. The verdict can be recomputed later.
+// A photo that wasn't confirmed brings a fresh code (fresh.ts), once the verdict is saved.
 export async function verifyStoredProof(deps: ProofDeps, proofId: string): Promise<VerdictResult | null> {
+  let result: VerdictResult | null;
   try {
-    return await verifyProof(deps, proofId);
+    result = await verifyProof(deps, proofId);
   } catch (error) {
     console.error(`Verifying proof ${proofId} failed:`, error);
     return null;
   }
+  if (result && result.outcome !== "verified" && result.status !== "overridden" && deps.fresh) {
+    try {
+      await requestFreshProof({ ...deps, fresh: deps.fresh }, proofId);
+    } catch (error) {
+      console.error(`A fresh proof request for proof ${proofId} failed:`, error instanceof Error ? error.message : "unknown error");
+    }
+  }
+  return result;
 }

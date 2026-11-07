@@ -4,6 +4,7 @@
 
 import { eq } from "drizzle-orm";
 import type { ProofVision } from "@/server/ai/proof-vision";
+import type { FreshProofDeps } from "@/server/proofs/fresh";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
@@ -19,6 +20,7 @@ export type IntakeDeps = {
   send: (to: string, body: string) => Promise<string>;
   afterReply?: (stored: StoredInbound) => Promise<void>; // the slow reading work, once the message is safe and answered
   vision?: ProofVision; // inspects proof photos; without it their vision checks stay unknown
+  fresh?: FreshProofDeps; // sends a new code when a proof photo isn't confirmed
 };
 
 export type StoredInbound = {

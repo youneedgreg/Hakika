@@ -10,7 +10,7 @@ import { apiError, mockJson, notFound } from "@/server/http";
 import { DEMO_PROOF_TOKEN, proofCapture } from "@/server/mocks/demo";
 import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
 import { isWellFormedToken } from "@/server/proofs/codes";
-import { liveProofVision } from "@/server/proofs/live";
+import { liveFreshProof, liveProofVision } from "@/server/proofs/live";
 import { captureView, type LinkProblem } from "@/server/proofs/requests";
 import { proofFieldsSchema } from "@/server/schemas";
 import { describeError } from "@/server/whatsapp/intake";
@@ -31,6 +31,7 @@ function captureDeps(): CaptureDeps {
   return {
     db: getDb(),
     vision: liveProofVision(),
+    fresh: liveFreshProof("whatsapp"),
     storeFile: async (path, file) => {
       const blob = await put(path, Buffer.from(file.bytes), { access: "private", contentType: file.contentType });
       return blob.pathname;
