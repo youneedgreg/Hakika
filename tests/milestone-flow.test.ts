@@ -1,6 +1,6 @@
 // Day 13: the milestone flow, on an in-memory Postgres with fake storage, a fake vision model and a
 // fake Twilio sender. The foreman says DONE and a progress proof verifies the milestone. A photo
-// that fails brings a fresh code (at most three on their own).
+// that fails brings a fresh code (at most three on their own); the owner can override with a reason.
 // Photos are made with sharp, so dHash runs for real.
 
 import { PGlite } from "@electric-sql/pglite";
@@ -16,6 +16,7 @@ import { submitCaptureProof } from "@/server/proofs/capture";
 import { isDoneKeyword } from "@/server/proofs/codes";
 import { type FreshProofDeps, MAX_AUTO_FRESH_REQUESTS, requestFreshProof } from "@/server/proofs/fresh";
 import { milestoneHold } from "@/server/proofs/holds";
+import { overrideVerdict } from "@/server/proofs/override";
 import { issueProofRequest } from "@/server/proofs/requests";
 import { findContactById, type InboundMessage, processInbound, type IntakeDeps } from "@/server/whatsapp/intake";
 import type { Notifier } from "@/server/whatsapp/notify";
@@ -28,6 +29,7 @@ const ON_SITE = { lat: -0.42016, lng: 36.94771, accuracyM: 12 };
 const FAR_AWAY = { lat: -0.0917, lng: 37.0062, accuracyM: 20 };
 const LINK_BASE = "https://tryhakika.vercel.app";
 const PETER_PHONE = "whatsapp:+15550000001";
+const OTIENO_EMAIL = "otieno@personal.example.com";
 const MLIMA_EMAIL = "mlima@business.example.com";
 
 // A 64×48 test photo: brightness rising away from a point that `seed` moves.
@@ -94,6 +96,14 @@ const outbound = (templateKey: string) => db.select().from(s.messages)
 const verdictOf = async (proofId: string) => (await db.select().from(s.verdicts).where(eq(s.verdicts.proofId, proofId)))[0];
 const codeIn = (body: string) => body.match(/new code is ([A-Z0-9]{4})/)?.[1];
 const tokenIn = (body: string) => body.match(/\/proof\/([A-Za-z0-9_-]{43})/)?.[1];
+
+// The foundation with a verified progress proof: what DONE and a good photo lead to.
+async function verifiedFoundation() {
+  const code = await progressCode(0);
+  const proofId = await upload(5, code.token, await photo(1));
+  expect((await verdictOf(proofId)).outcome).toBe("verified");
+  return proofId;
+}
 
 beforeAll(async () => {
   await migrate(db, { migrationsFolder: "./drizzle" });
@@ -267,5 +277,65 @@ describe("fresh proof after a photo fails", () => {
     await db.update(s.requests).set({ status: "verified" }).where(eq(s.requests.id, request.id));
     await db.delete(s.proofRequests).where(eq(s.proofRequests.replacesId, code.id));
     expect(await requestFreshProof({ db, fresh: fresh() }, proofId)).toBe("not_needed");
+  });
+});
+
+describe("the owner's override", () => {
+  it("verifies a held milestone with a logged reason and closes the open fresh code", async () => {
+    const proofId = await upload(5, (await progressCode(0)).token, await photo(1), FAR_AWAY);
+    const result = await overrideVerdict({ db, now: at(30) }, proofId, "I visited the site on Saturday and saw the foundation.");
+
+    expect(result).toEqual({
+      ok: true,
+      value: { proofId, overridden: true, reason: "I visited the site on Saturday and saw the foundation.", at: at(30)().toISOString() },
+    });
+    expect((await milestone()).status).toBe("verified");
+    expect(await verdictOf(proofId)).toMatchObject({ overriddenBy: DEMO.ownerId, overrideReason: "I visited the site on Saturday and saw the foundation." });
+    expect((await progressRequests()).map((r) => r.status)).toEqual(["used", "superseded"]);
+    const [audit] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.kind, "override"));
+    expect(audit).toMatchObject({
+      action: "verdict.overridden", actor: `owner:${DEMO.ownerId}`, proofId, milestoneId: "m2",
+      description: expect.stringContaining('which was suspicious. Reason: "I visited the site on Saturday and saw the foundation."'),
+    });
+  });
+
+  it("answers a repeated override with the first one, and refuses a verified proof", async () => {
+    const held = await upload(5, (await progressCode(0)).token, await photo(1), FAR_AWAY);
+    await overrideVerdict({ db, now: at(30) }, held, "Seen in person.");
+    expect(await overrideVerdict({ db, now: at(31) }, held, "Clicked twice.")).toMatchObject({
+      ok: true, value: { reason: "Seen in person.", at: at(30)().toISOString() },
+    });
+    expect(await db.select().from(s.auditEvents).where(eq(s.auditEvents.kind, "override"))).toHaveLength(1);
+
+    await resetDemo(db, { otieno: OTIENO_EMAIL });
+    const good = await verifiedFoundation();
+    expect(await overrideVerdict({ db }, good, "No reason.")).toMatchObject({ ok: false, httpStatus: 409, code: "nothing_to_override" });
+  });
+
+  it("releases a held delivery, so payments on its milestone can go ahead", async () => {
+    const [request] = await db.insert(s.requests).values({
+      projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter, status: "paid", quotedSupplierName: "Baraka Hardware",
+    }).returning();
+    const [payment] = await db.insert(s.payments).values({
+      projectId: DEMO.projectId, kind: "materials", requestId: request.id, payeeSupplierId: DEMO.supplierIds.mlima,
+      payeeEmail: MLIMA_EMAIL, amountKesCents: 3_950_000, amountUsdCents: 30_389, kesPerUsd: "129.98",
+      status: "captured", paypalRequestId: "capture-d2", paypalOrderId: "ORD-d2", paypalCaptureId: "CAP-d2", capturedAt: at(-60)(),
+    }).returning();
+    const code = await issueProofRequest({ db, now: at(0) }, {
+      projectId: DEMO.projectId, milestoneId: "m2", paymentId: payment.id, contactId: DEMO.contactIds.peter, purpose: "delivery",
+    });
+    const proofId = await upload(5, code.token, await photo(1), FAR_AWAY);
+    expect(await milestoneHold(db, "m2")).not.toBeNull();
+
+    expect((await overrideVerdict({ db }, proofId, "The supplier confirmed delivery by phone.")).ok).toBe(true);
+    expect((await db.select().from(s.requests).where(eq(s.requests.id, request.id)))[0].status).toBe("verified");
+    expect(await milestoneHold(db, "m2")).toBeNull();
+  });
+
+  it("404s an unknown proof and refuses one whose milestone has moved on", async () => {
+    expect(await overrideVerdict({ db }, "prf_doesnotexist00001", "Reason here.")).toMatchObject({ ok: false, httpStatus: 404 });
+    const proofId = await upload(5, (await progressCode(0)).token, await photo(1), FAR_AWAY);
+    await db.update(s.milestones).set({ status: "verified" }).where(eq(s.milestones.id, "m2"));
+    expect(await overrideVerdict({ db }, proofId, "Reason here.")).toMatchObject({ ok: false, httpStatus: 409, code: "not_waiting" });
   });
 });
