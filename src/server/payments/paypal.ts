@@ -45,7 +45,7 @@ export type PayPalOrder = z.infer<typeof orderSchema>;
 export type PayPalCapture = z.infer<typeof captureSchema>;
 
 export type NewOrder = {
-  requestId: string; // reference_id
+  referenceId: string; // reference_id: the request (materials) or the milestone (labour)
   paymentId: string; // custom_id
   payeeEmail: string;
   usdAmount: string; // "303.89"
@@ -141,7 +141,7 @@ export function createPayPalClient(
       return call("POST", "/v2/checkout/orders", {
         intent: "CAPTURE",
         purchase_units: [{
-          reference_id: order.requestId,
+          reference_id: order.referenceId,
           custom_id: order.paymentId,
           description: order.description,
           amount: { currency_code: "USD", value: order.usdAmount },

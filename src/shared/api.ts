@@ -46,12 +46,15 @@ export type { ApprovalCard };
 export type DeclineBody = { reason: string };
 export type DeclineResult = { requestId: string; status: "declined" };
 
-// POST /api/payments/orders — the server computes the amount; the browser only names the request.
-export type CreateOrderBody = { requestId: string };
+// POST /api/payments/orders — the server computes the amount; the browser only names what is paid
+// for: a request (materials, to the supplier) or a verified milestone (labour, to the fundi).
+export type CreateOrderBody = { requestId: string } | { milestoneId: string };
 export type CreateOrderResult = { orderId: string };
 
-// POST /api/payments/orders/[orderId]/capture
+// POST /api/payments/orders/[orderId]/capture — CaptureResult for a request's order,
+// LabourCaptureResult for a milestone's (tell them apart by requestId or milestoneId).
 export type CaptureResult = { requestId: string; status: RequestStatus; captureId: string };
+export type LabourCaptureResult = { milestoneId: string; status: MilestoneStatus; captureId: string };
 
 // GET /api/proof/[token]
 export type ProofCapture = {

@@ -8,7 +8,8 @@ const id = z.string().trim().min(1).max(100);
 
 export const declineSchema = z.strictObject({ reason });
 
-export const createOrderSchema = z.strictObject({ requestId: id });
+// A request (materials) or a milestone (labour); never an amount.
+export const createOrderSchema = z.union([z.strictObject({ requestId: id }), z.strictObject({ milestoneId: id })]);
 
 export const overrideSchema = z.strictObject({ reason });
 

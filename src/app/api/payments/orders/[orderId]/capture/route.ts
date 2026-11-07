@@ -1,5 +1,5 @@
-// POST /api/payments/orders/[orderId]/capture — capture after the owner approves in PayPal. The
-// capture response is the source of truth; a retry sends the same PayPal-Request-Id, so it can't
+// POST /api/payments/orders/[orderId]/capture — capture after the owner approves in PayPal, for a
+// request's order or a milestone's labour order. The capture response is the source of truth; a retry sends the same PayPal-Request-Id, so it can't
 // charge twice. The demo's mock order answers as if it was paid.
 
 import type { NextRequest } from "next/server";
