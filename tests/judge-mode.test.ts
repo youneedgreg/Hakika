@@ -215,7 +215,10 @@ describe("Valid delivery", () => {
 
     expect(result.setup).toEqual([expect.stringMatching(/marked paid without a PayPal payment/)]);
     const [payment] = await db.select().from(s.payments).where(like(s.payments.paypalCaptureId, `${SEED_CAPTURE_PREFIX}%`));
-    expect(payment).toMatchObject({ status: "captured", kind: "materials", amountKesCents: 50 * 79_000 });
+    // 50 bags at Mlima's seeded price, whatever the demo's price sheet says it is.
+    const [price] = await db.select().from(s.supplierPrices)
+      .where(and(eq(s.supplierPrices.supplierId, DEMO.supplierIds.mlima), eq(s.supplierPrices.itemKey, "cement_50kg")));
+    expect(payment).toMatchObject({ status: "captured", kind: "materials", amountKesCents: 50 * price.unitPriceKesCents });
     const [seeded] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.action, "judge.delivery_seeded"));
     expect(seeded.description).toMatch(/No PayPal payment was made for it/);
 
