@@ -17,6 +17,9 @@ import { POST as chat } from "@/app/api/agent/chat/route";
 import { GET as getLedger } from "@/app/api/ledger/route";
 import { POST as simulate } from "@/app/api/judge/simulate/route";
 import { POST as reset } from "@/app/api/judge/reset/route";
+import { POST as runScenarioRoute } from "@/app/api/judge/scenarios/[id]/route";
+import { GET as judgeChat } from "@/app/api/judge/chat/route";
+import { GET as judgeImage } from "@/app/api/judge/messages/[id]/image/route";
 import { POST as paypalWebhook } from "@/app/api/webhooks/paypal/route";
 import {
   DEMO_PROJECT_ID, DEMO_PROOF_IDS, DEMO_PROOF_TOKEN, DEMO_REQUEST_ID,
@@ -187,9 +190,28 @@ describe("ledger, agent and Judge Mode routes", () => {
     expect(stranger.status).toBe(400);
   });
 
-  it("resets the demo project", async () => {
-    const res = await reset(post("/x", { projectId: DEMO_PROJECT_ID }));
-    expect(await res.json()).toEqual({ projectId: DEMO_PROJECT_ID, reset: true });
+  // The reset, the scenarios and the chat run on the database: tests/judge-mode.test.ts. Here, what
+  // each route refuses before it gets there.
+  it("refuses a reset of anything but the demo project", async () => {
+    expect((await reset(post("/x", {}))).status).toBe(400);
+    expect((await reset(post("/x", { projectId: DEMO_PROJECT_ID, extra: 1 }))).status).toBe(400);
+    expect((await reset(post("/x", { projectId: "someone-else" }))).status).toBe(404);
+  });
+
+  it("runs only Judge Mode's three scenarios, on the demo project", async () => {
+    expect((await runScenarioRoute(post("/x", { projectId: DEMO_PROJECT_ID }), ctx({ id: "toString" }))).status).toBe(404);
+    expect((await runScenarioRoute(post("/x", { projectId: "someone-else" }), ctx({ id: "recycled-photo" }))).status).toBe(404);
+    expect((await runScenarioRoute(post("/x", {}), ctx({ id: "recycled-photo" }))).status).toBe(400);
+  });
+
+  it("checks the chat's query before reading it", async () => {
+    expect((await judgeChat(get("/api/judge/chat"))).status).toBe(400);
+    expect((await judgeChat(get(`/api/judge/chat?projectId=${DEMO_PROJECT_ID}&after=yesterday`))).status).toBe(400);
+    expect((await judgeChat(get("/api/judge/chat?projectId=someone-else"))).status).toBe(404);
+  });
+
+  it("serves simulator photos only for well-formed message IDs", async () => {
+    expect((await judgeImage(get("/x"), ctx({ id: "../whatsapp/x" }))).status).toBe(404);
   });
 });
 

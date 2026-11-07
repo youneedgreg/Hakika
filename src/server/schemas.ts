@@ -29,6 +29,14 @@ export const simulateSchema = z.strictObject({
 
 export const resetSchema = z.strictObject({ projectId: id });
 
+export const runScenarioSchema = z.strictObject({ projectId: id });
+
+// GET /api/judge/chat's query string.
+export const judgeChatQuerySchema = z.strictObject({
+  projectId: id,
+  after: z.iso.datetime({ offset: true }).optional(),
+});
+
 // Text fields of the multipart proof upload (the image is checked separately).
 export const proofFieldsSchema = z.strictObject({
   latitude: z.coerce.number().min(-90).max(90),
