@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-gantt.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/copy-gantt.mjs",
     "build": "next build",

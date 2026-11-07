@@ -2,9 +2,11 @@
 
 **Who:** Greg owns everything behind the screen. Juliet owns everything judges see and hear.
 **Our submit deadline:** Wed 11 Nov, 11:59pm Nairobi. Devpost closes Thu 12 Nov, 11:00pm; treat that as a buffer only.
-**Last updated:** Sat 31 Oct 2026.
+**Last updated:** Mon 2 Nov 2026.
 
 > **Status: proposed.** These dates still need agreeing between Greg and Juliet. They fit about 20 days of Greg's planned work and all of Juliet's remaining build into 11 days, so they are very tight. If a gate slips, use the [cut order](#if-a-gate-slips).
+>
+> **Where we are, 2 Nov:** Gate 0 passed on 31 Oct. Greg's Tue 3 Nov work merged on 1 Nov in PRs [#5](https://github.com/youneedgreg/Hakika/pull/5) and [#6](https://github.com/youneedgreg/Hakika/pull/6), and the quote photo to checked request PR is next. Juliet's owner screens merged on 2 Nov in PR [#7](https://github.com/youneedgreg/Hakika/pull/7), ahead of schedule. They run on sample data until each real route lands. Real quote and Swahili testing still needs Juliet's test material.
 
 ## Workflow
 
@@ -21,8 +23,9 @@ flowchart TB
     direction TB
     G0["Done<br/>Shared types, mock routes,<br/>database, demo seed, state machines"]:::done
     G1["Merged, PR #3<br/>WhatsApp webhook, templates,<br/>Judge Mode simulate"]:::done
-    G1B["Now<br/>Vercel variables, sandbox webhook,<br/>real phone test"]:::now
-    G2["Tue 3 Nov<br/>Voice notes, Nova parsing,<br/>pricing engine"]:::next
+    G1B["Done 31 Oct<br/>Vercel variables, sandbox webhook,<br/>real phone test"]:::done
+    G2["Merged 1 Nov, PRs #5 and #6<br/>Voice notes, Nova parsing,<br/>pricing engine"]:::done
+    G2B["Now<br/>Quote photo to checked request,<br/>approval card from the database"]:::now
     G3["Wed 4 Nov<br/>Owner summary,<br/>PayPal create and capture"]:::next
     G4["Thu 5 Nov<br/>PayPal webhooks, confirmations,<br/>proof requests and upload"]:::next
     G5["Fri 6 Nov<br/>Verification engine,<br/>Nova vision, holds"]:::next
@@ -31,15 +34,15 @@ flowchart TB
     G8["Mon 9 Nov<br/>Security pass, tests,<br/>AI eval numbers"]:::next
     G9["Tue 10 Nov<br/>README technical sections,<br/>QA fixes"]:::next
     G10["Wed 11 Nov<br/>Devpost technical sections,<br/>testing instructions"]:::next
-    G0 --> G1 --> G1B --> G2 --> G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10
+    G0 --> G1 --> G1B --> G2 --> G2B --> G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10
   end
 
   subgraph JULIET["Juliet: what judges see and hear"]
     direction TB
     J0["Done<br/>Design system components,<br/>app shell"]:::done
     J1["By Mon 2 Nov<br/>Template copy, price sheet,<br/>voice notes, code and site photos"]:::now
-    J2["Tue 3 Nov<br/>Overview page,<br/>approval card, PayPal button"]:::next
-    J3["Wed 4 Nov<br/>Bryntum Gantt<br/>on mock data"]:::next
+    J2["Merged 2 Nov, PR #7<br/>Overview page,<br/>approval card, PayPal button"]:::done
+    J3["Merged 2 Nov, PR #7<br/>Bryntum Gantt<br/>on mock data"]:::done
     J4["Thu 5 Nov<br/>Approval card on real routes,<br/>money trail page"]:::next
     J5["Fri 6 Nov<br/>Proof capture page,<br/>proof review page"]:::next
     J6["Sat 7 Nov<br/>Gantt on real data,<br/>alerts and override dialog"]:::next
@@ -52,7 +55,7 @@ flowchart TB
 
   subgraph BOTH["Together: gates"]
     direction TB
-    B1{{"Gate 0, by Mon 2 Nov<br/>A real WhatsApp message is<br/>stored and answered"}}:::gate
+    B1{{"Gate 0, passed 31 Oct<br/>A real WhatsApp message is<br/>stored and answered"}}:::gate
     B2{{"Gate 1, Wed 4 Nov<br/>Quote becomes an approval card;<br/>approve in PayPal; shows Paid"}}:::gate
     B3{{"Gate 2, Sat 7 Nov<br/>Full money loop on the hosted demo,<br/>no database edits by hand"}}:::gate
     B4{{"Gate 3, Tue 10 Nov<br/>Dress rehearsal runs twice<br/>with no manual fixes"}}:::gate
@@ -86,9 +89,9 @@ flowchart TB
 
 | Date | Greg | Juliet | Gate |
 |---|---|---|---|
-| **By Mon 2 Nov** | Now that PR #3 has merged: Vercel variables, sandbox webhook, real phone test | Send template copy (EN and SW), price sheet and quotes, Swahili voice notes, code photos and site photos | **Gate 0:** a real WhatsApp message is stored and answered with a template |
-| **Tue 3 Nov** | Groq Whisper translation, Nova parsing and quote reading, pricing engine, daily USD/KES rate, at least 12 pricing tests | Overview page, approval card and PayPal button on mock data | A quote photo becomes a parsed request; pricing tests pass |
-| **Wed 4 Nov** | Owner summary with number guard, PayPal create order (supplier as payee) and capture | Bryntum Gantt on mock data | **Gate 1:** quote to approval card, approve in PayPal sandbox, shows Paid |
+| **By Mon 2 Nov** | Done 31 Oct: Vercel variables, sandbox webhook, real phone test | Send template copy (EN and SW), price sheet and quotes, Swahili voice notes, code photos and site photos | **Gate 0, passed 31 Oct:** a real WhatsApp message is stored and answered with a template |
+| **Tue 3 Nov** | Merged 1 Nov: Groq Whisper translation, Nova parsing and quote reading, pricing engine, daily USD/KES rate, over 40 pricing tests. Quote photo to checked request is built too; its PR is next | Merged 2 Nov: overview page, approval card and PayPal button on mock data | A quote photo becomes a parsed request; pricing tests pass |
+| **Wed 4 Nov** | Owner summary with number guard, PayPal create order (supplier as payee) and capture | Merged 2 Nov: Bryntum Gantt on mock data | **Gate 1:** quote to approval card, approve in PayPal sandbox, shows Paid |
 | **Thu 5 Nov** | PayPal webhooks, WhatsApp confirmations, audit events, proof codes, single-use links, upload, WhatsApp pin fallback | Approval card on real routes, money trail page | Payments appear in the money trail; a phone proof is stored with code, location and time |
 | **Fri 6 Nov** | Verification engine (dHash, duplicates, geofence, freshness, code), Nova vision checks, outcome rule, holds | Proof capture page (Android Chrome and iPhone Safari), proof review page | Test photos get the expected verdicts |
 | **Sat 7 Nov** | Milestone flow, labour payment, fresh proof request, override with logged reason | Gantt on real data, alerts, override dialog, loading and error states | **Gate 2:** full money loop on the hosted demo with real phones |
@@ -123,6 +126,8 @@ flowchart LR
 - Messages to people on site are fixed English and Swahili templates. The model never writes to them.
 - PayPal sandbox only. Hakika never holds funds.
 - Only fictional people and demo photos go to the AI models.
+- A model can be misled by text in a photo: in testing, Nova changed a supplier and a price because a quote told it to. So code checks what it reads, and a quote with text aimed at a model is discarded.
+- WhatsApp only delivers our messages within 24 hours of the person's last message. Outside that, Hakika won't send; the owner will see an alert in the app instead. This check isn't built yet; it comes with the outbound templates. Before filming, every phone messages the sandbox first.
 
 ## If a gate slips
 

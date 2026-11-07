@@ -46,9 +46,11 @@ describe("demo seed", () => {
 
   it("prices cement so a verified supplier beats the quote", async () => {
     const [reference] = await db.select().from(s.priceReferences).where(eq(s.priceReferences.itemKey, "cement_50kg"));
-    expect(reference.medianKesCents).toBe(78_000);
-    const mlima = await db.select().from(s.supplierPrices).where(eq(s.supplierPrices.supplierId, DEMO.supplierIds.mlima));
-    expect(mlima.find((p) => p.itemKey === "cement_50kg")?.unitPriceKesCents).toBe(79_000);
+    expect(reference.medianKesCents).toBe(110_000);
+    for (const supplierId of Object.values(DEMO.supplierIds)) {
+      const prices = await db.select().from(s.supplierPrices).where(eq(s.supplierPrices.supplierId, supplierId));
+      expect(prices.find((p) => p.itemKey === "cement_50kg")?.unitPriceKesCents).toBe(110_000);
+    }
   });
 
   it("takes payee emails from the caller and leaves missing ones empty", async () => {

@@ -29,6 +29,69 @@ function input(overrides: Partial<PriceCheckInput> = {}): PriceCheckInput {
 
 const ofType = (result: ReturnType<typeof checkPrices>, type: string) => result.findings.filter((f) => f.type === type);
 
+// Nova wrote "bags" on a real quote through production, and the catalog says "bag".
+describe("a unit written in the plural", () => {
+  const bags = (kes: number, qty: number, unit = "bags"): QuotedLine => ({ ...cement(kes, qty), unit });
+
+  it("passes the quote Nova read on production with no findings", () => {
+    const result = checkPrices(input({ lines: [bags(790, 10)], statedTotalKesCents: 790_000 }));
+    expect(result.lines[0].referenceUnitPriceKesCents).toBe(78_000);
+    expect(result.findings).toEqual([]);
+    expect(result.recommended).toMatchObject({ supplierId: "s-mlima", totalKesCents: 790_000 });
+  });
+
+  it("still checks the price against the median, and words the unit in the singular", () => {
+    const [finding] = ofType(checkPrices(input({ lines: [bags(1000, 10)] })), "price_above_market");
+    expect(finding.severity).toBe("warn");
+    expect(finding.message).toContain("a bag,");
+  });
+
+  it("still checks the quantity against the plan", () => {
+    const [finding] = ofType(checkPrices(input({ lines: [bags(790, 200)] })), "qty_above_plan");
+    expect(finding.data).toMatchObject({ ordered: 200, remaining: 100 });
+    expect(finding.message).toContain("100 bags remain");
+  });
+
+  it("still offers a cheaper verified supplier", () => {
+    const result = checkPrices(input({ lines: [bags(900, 10)] }));
+    expect(result.recommended).toMatchObject({ supplierId: "s-kiawara", totalKesCents: 820_000 });
+    expect(ofType(result, "cheaper_verified_supplier")).toHaveLength(1);
+  });
+
+  it("still finds an alternative to an unverified supplier", () => {
+    const result = checkPrices(input({ lines: [bags(790, 10)], quotedSupplier: baraka }));
+    expect(result.recommended).toMatchObject({ supplierId: "s-mlima", totalKesCents: 790_000 });
+  });
+
+  it("ignores case and spaces around the plural", () => {
+    const result = checkPrices(input({ lines: [bags(790, 10, " BAGS ")] }));
+    expect(result.lines[0].referenceUnitPriceKesCents).toBe(78_000);
+  });
+
+  it("matches a plural in the reference or plan as well as on the quote", () => {
+    const result = checkPrices(input({
+      lines: [cement(790, 10)],
+      references: [{ itemKey: "cement_50kg", unit: "bags", medianKesCents: 78_000 }],
+      planRemaining: [{ itemKey: "cement_50kg", qty: 100, unit: "bags" }],
+    }));
+    expect(result.findings).toEqual([]);
+  });
+
+  it("doesn't treat a different unit in the plural as the same unit", () => {
+    const result = checkPrices(input({ lines: [bags(5000, 10, "tonnes")], planRemaining: [] }));
+    expect(result.lines[0].referenceUnitPriceKesCents).toBeNull();
+    expect(ofType(result, "price_above_market")).toEqual([]);
+  });
+
+  it("doesn't cut a word that only ends in a double s", () => {
+    const result = checkPrices(input({
+      lines: [bags(790, 10, "glass")],
+      references: [{ itemKey: "cement_50kg", unit: "glas", medianKesCents: 78_000 }],
+    }));
+    expect(result.lines[0].referenceUnitPriceKesCents).toBeNull();
+  });
+});
+
 describe("the price against the reference median", () => {
   const priceAt = (median: number, price: number) => checkPrices(input({
     lines: [cement(price)],
@@ -203,9 +266,14 @@ describe("missing or inconsistent information", () => {
 describe("the demo story", () => {
   it("matches the numbers on the mock approval card", () => {
     const result = checkPrices(input({
-      lines: [cement(950)],
+      lines: [cement(1300)],
       quotedSupplier: baraka,
-      statedTotalKesCents: 4_750_000,
+      statedTotalKesCents: 6_500_000,
+      references: [{ itemKey: "cement_50kg", unit: "bag", medianKesCents: 110_000 }],
+      verifiedSuppliers: [
+        { id: "s-mlima", name: "Mlima Hardware", prices: [{ itemKey: "cement_50kg", unit: "bag", unitPriceKesCents: 110_000 }] },
+        { id: "s-kiawara", name: "Kiawara Builders Supplies", prices: [{ itemKey: "cement_50kg", unit: "bag", unitPriceKesCents: 110_000 }] },
+      ],
     }));
     const { recommended } = approvalCard;
 

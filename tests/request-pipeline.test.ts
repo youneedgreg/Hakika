@@ -1,5 +1,5 @@
 // From a WhatsApp message to an approval card, on an in-memory Postgres with fake models and a fake
-// Twilio. The seed's prices are placeholders, so these check the path, not the market.
+// Twilio. The seed follows the handoff price sheet; these check the path and pricing behavior.
 
 import { PGlite } from "@electric-sql/pglite";
 import { desc, eq } from "drizzle-orm";
@@ -21,7 +21,7 @@ const PHONE = "+254799999999";
 const usage = { inputTokens: 1, outputTokens: 1 };
 const rate = async () => ({ kesPerUsd: "129.2" });
 
-const cement = (kes = 950, qty: number | null = 50) => ({
+const cement = (kes = 1300, qty: number | null = 50) => ({
   itemKey: "cement_50kg" as string | null, description: "Cement, 50 kg bag", qty, unit: "bag",
   unitPriceKesCents: kes * 100 as number | null,
 });
@@ -30,7 +30,7 @@ const quoteAnswer = (overrides = {}) => ({
   outcome: "read" as const,
   supplierName: "Baraka Hardware" as string | null,
   lines: [cement()],
-  statedTotalKesCents: 4_750_000 as number | null,
+  statedTotalKesCents: 6_500_000 as number | null,
   raw: { supplierName: "Baraka Hardware" },
   usage,
   ...overrides,
@@ -83,14 +83,14 @@ beforeEach(async () => {
 });
 
 describe("a quote photo from the foreman", () => {
-  it("becomes a checked request on the current milestone, with its photo", async () => {
+  it("sends a checked request on the current milestone for approval, with its photo", async () => {
     const { deps } = setup();
     const request = await sendPhoto(deps);
 
     expect(request).toMatchObject({
       status: "awaiting_approval", projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter,
-      quotedSupplierId: null, quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 4_750_000,
-      recommendedSupplierId: DEMO.supplierIds.mlima, recommendedTotalKesCents: 3_950_000,
+      quotedSupplierId: null, quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 6_500_000,
+      recommendedSupplierId: DEMO.supplierIds.kiawara, recommendedTotalKesCents: 5_500_000,
     });
     expect(request.quoteImagePath).toMatch(/^whatsapp\/msg_.+\.jpg$/);
     expect(request.messageId).toEqual(expect.any(String));
@@ -111,7 +111,7 @@ describe("a quote photo from the foreman", () => {
     });
     expect(card?.findings.map((f) => [f.type, f.severity])).toEqual(approvalCard.findings.map((f) => [f.type, f.severity]));
     expect(card?.summary).toBe(
-      "Peter Mwangi sent a quote from Baraka Hardware for KES 47,500. Mlima Hardware, a verified supplier, can supply the order for KES 39,500.",
+      "Peter Mwangi sent a quote from Baraka Hardware for KES 65,000. Kiawara Builders Supplies, a verified supplier, can supply the order for KES 55,000.",
     );
   });
 
@@ -176,14 +176,14 @@ describe("the owner's summary", () => {
     (await events(requestId)).find((event) => event.action === "request.sent_for_approval");
 
   it("uses the model's wording when every number in it is real", async () => {
-    const text = "Peter Mwangi sent a quote from Baraka Hardware for KES 47,500. Mlima Hardware can supply it for KES 39,500.";
+    const text = "Peter Mwangi sent a quote for KES 65,000. Kiawara Builders Supplies can supply it for KES 55,000.";
     const { deps, models } = setup(fakeModels({ explainFindings: vi.fn(async () => text) }));
     const request = await sendPhoto(deps);
 
     expect(request).toMatchObject({ status: "awaiting_approval", summary: text });
     expect(models.explainFindings).toHaveBeenCalledWith(expect.objectContaining({
-      sentBy: "Peter Mwangi, the foreman on site", quotedSupplier: "a supplier Hakika has not verified", quotedTotal: "KES 47,500",
-      recommended: { supplier: "Mlima Hardware", total: "KES 39,500" },
+      sentBy: "Peter Mwangi, the foreman on site", quotedSupplier: "a supplier Hakika has not verified", quotedTotal: "KES 65,000",
+      recommended: { supplier: "Kiawara Builders Supplies", total: "KES 55,000" },
     }));
     expect((await sent(request.id))?.data).toEqual({ summarySource: "model" });
   });
@@ -194,7 +194,7 @@ describe("the owner's summary", () => {
     const request = await sendPhoto(deps);
 
     expect(request.status).toBe("awaiting_approval");
-    expect(request.summary).toContain("KES 47,500");
+    expect(request.summary).toContain("KES 65,000");
     expect((await sent(request.id))?.data).toEqual({
       summarySource: "template", summaryRejected: { reason: "unknown_number", text },
     });
@@ -225,7 +225,8 @@ describe("the owner's summary", () => {
     const request = await sendPhoto(deps);
 
     expect(request.status).toBe("awaiting_approval");
-    expect(request.summary).toContain("KES 47,500");
+    expect(request.summary).toContain("KES 65,000");
+    expect(request.summary).toContain("KES 55,000");
     expect((await sent(request.id))?.data).toEqual({ summarySource: "template", summaryRejected: { reason: "model_failed" } });
   });
 
