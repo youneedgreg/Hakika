@@ -24,7 +24,15 @@ type Tx = Parameters<Parameters<AnyDb["transaction"]>[0]>[0];
 
 // `vision` is how a proof photo is inspected. Without it, the code and vision checks stay unknown.
 // `fresh` is how a new code reaches someone on site after a photo fails; without it none is sent.
-export type ProofDeps = { db: AnyDb; now?: () => Date; vision?: ProofVision; fresh?: FreshProofDeps };
+// `newCode` lets Judge Mode issue the code drawn on its ready-made delivery photo; when it's absent
+// or returns undefined, the code is random.
+export type ProofDeps = {
+  db: AnyDb;
+  now?: () => Date;
+  vision?: ProofVision;
+  fresh?: FreshProofDeps;
+  newCode?: () => string | undefined;
+};
 const clock = (deps: ProofDeps) => (deps.now ?? (() => new Date()))();
 
 export type IssuedProofRequest = { id: string; code: string; token: string; expiresAt: Date; milestoneName: string };
@@ -71,7 +79,7 @@ async function issue(deps: ProofDeps, input: IssueInput, fresh: ProofRequest | n
   const issuedAt = clock(deps);
   const expiresAt = new Date(issuedAt.getTime() + PROOF_LINK_TTL_MS);
   const token = generateToken();
-  const code = generateCode();
+  const code = deps.newCode?.() ?? generateCode();
 
   return deps.db.transaction(async (tx) => {
     const [milestone] = await tx.select().from(s.milestones).where(eq(s.milestones.id, input.milestoneId));
