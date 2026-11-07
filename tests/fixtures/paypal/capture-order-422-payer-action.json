@@ -1,0 +1,23 @@
+{
+  "name": "UNPROCESSABLE_ENTITY",
+  "details": [
+    {
+      "issue": "PAYER_ACTION_REQUIRED",
+      "description": "Transaction cannot complete successfully, instruct the buyer to return to PayPal."
+    }
+  ],
+  "message": "The requested action could not be performed, semantically incorrect, or failed business validation.",
+  "debug_id": "f63fbc340a6ce",
+  "links": [
+    {
+      "href": "https://developer.paypal.com/api/orders/v2/#error-PAYER_ACTION_REQUIRED",
+      "rel": "information_link",
+      "method": "GET"
+    },
+    {
+      "href": "https://www.paypal.com/checkoutnow?token=5O190127TN364715T",
+      "rel": "payer-action",
+      "method": "GET"
+    }
+  ]
+}

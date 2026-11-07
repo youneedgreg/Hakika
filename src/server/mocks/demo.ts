@@ -215,7 +215,7 @@ export const overview: ProjectOverview = {
     },
     {
       id: "a-price-cement", kind: "price_warning", severity: "warn",
-      message: "The cement quote is 14% above the verified median.",
+      message: "The cement quote is 18% above the verified median.",
       link: { requestId: DEMO_REQUEST_ID },
     },
   ],
