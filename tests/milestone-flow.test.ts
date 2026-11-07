@@ -250,7 +250,8 @@ describe("fresh proof after a photo fails", () => {
     expect(sent[0].to).toBe(PETER_PHONE);
     expect(codeIn(sent[0].body)).toBeUndefined(); // Swahili copy
     expect(sent[0].body).toContain(`Nambari yako mpya ni ${renewed.code}`);
-    expect(sent[0].body).not.toMatch(/km|location check|suspicious/i); // says what's needed, never why
+    // Says what's needed, never why. The link is left out: its random token can contain "km".
+    expect(sent[0].body.replace(/https?:\/\/\S+/g, "")).not.toMatch(/km|location check|suspicious/i);
     const [message] = await outbound("fresh_proof_request");
     expect(message.body).toContain("/proof/[link hidden]");
     const [audit] = await actions("proof.fresh_requested");
