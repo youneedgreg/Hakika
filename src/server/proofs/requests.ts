@@ -5,6 +5,7 @@
 // engine's job (Day 11), so nothing in this file moves a request or milestone past awaiting_proof.
 
 import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import type { ProofVision } from "@/server/ai/proof-vision";
 import type { ProofCapture } from "@/shared/api";
 import type { AnyDb } from "@/server/db/client";
 import type { PROOF_PURPOSES, PROOF_SOURCES } from "@/server/db/enums";
@@ -19,7 +20,8 @@ type ProofRequest = typeof s.proofRequests.$inferSelect;
 type Contact = typeof s.siteContacts.$inferSelect;
 type Tx = Parameters<Parameters<AnyDb["transaction"]>[0]>[0];
 
-export type ProofDeps = { db: AnyDb; now?: () => Date };
+// `vision` is how a proof photo is inspected. Without it, the code and vision checks stay unknown.
+export type ProofDeps = { db: AnyDb; now?: () => Date; vision?: ProofVision };
 const clock = (deps: ProofDeps) => (deps.now ?? (() => new Date()))();
 
 export type IssuedProofRequest = { id: string; code: string; token: string; expiresAt: Date; milestoneName: string };

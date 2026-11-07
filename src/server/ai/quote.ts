@@ -4,14 +4,11 @@
 import { generateText, type LanguageModel, NoObjectGeneratedError, Output } from "ai";
 import { z } from "zod";
 import type { MediaFile } from "@/server/whatsapp/media";
-import { type CatalogItem, catalogForPrompt, knownItemKey, novaModel, type NovaUsage, unitFor } from "./nova";
+import {
+  type CatalogItem, catalogForPrompt, IMAGE_TYPES, knownItemKey, looksLikeInstructions, novaModel, type NovaUsage, unitFor,
+} from "./nova";
 
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const LINE_TOTAL_TOLERANCE_KES = 1;
-// Words a real quote has no use for. In testing, Nova obeyed text like this in a photo despite being
-// told not to, changing the supplier and a price, so a match discards everything it read. A list can't
-// catch every attempt: the last defences are that money only goes to verified suppliers, on approval.
-const INSTRUCTION_LIKE = /\b(ignore|disregard|instructions?|system|prompt|assistant|override|puuza|maelekezo)\b|\bAI\b|\bset\s+\w+\s+to\b/i;
 const MAX_OUTPUT_TOKENS = 2_000;
 
 const quoteSchema = z.object({
@@ -97,7 +94,9 @@ export async function readQuote(
       }],
     });
     const novaUsage = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens };
-    if (INSTRUCTION_LIKE.test(output.allText)) {
+    // A list can't catch every attempt: the last defences are that money only goes to verified
+    // suppliers, on the owner's approval.
+    if (looksLikeInstructions(output.allText)) {
       return { outcome: "suspicious", allText: output.allText, raw: output, usage: novaUsage };
     }
     return {

@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import type { ProofReview } from "@/shared/types";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
+import type { ProofDeps } from "./requests";
 import { proofImageUrl, verifyProof } from "./verdicts";
 
 // A proof ID as newId("prf") makes it. Anything else is refused before a database lookup.
@@ -14,7 +15,7 @@ export function isWellFormedProofId(id: string): boolean {
   return /^prf_[A-Za-z0-9_-]{16}$/.test(id);
 }
 
-export async function loadProofReview(deps: { db: AnyDb; now?: () => Date }, proofId: string): Promise<ProofReview | null> {
+export async function loadProofReview(deps: ProofDeps, proofId: string): Promise<ProofReview | null> {
   const { db } = deps;
   const [row] = await db.select({
     proof: s.proofs,
