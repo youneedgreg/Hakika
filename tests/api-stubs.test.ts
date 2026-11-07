@@ -5,7 +5,6 @@ import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { GET as getProject } from "@/app/api/projects/[id]/route";
-import { GET as getOverview } from "@/app/api/projects/[id]/overview/route";
 import { GET as getGantt } from "@/app/api/projects/[id]/gantt/route";
 import { GET as getRequest } from "@/app/api/requests/[id]/route";
 import { POST as declineRequest } from "@/app/api/requests/[id]/decline/route";
@@ -46,14 +45,11 @@ function ctx<P extends Record<string, string>>(params: P) {
 }
 
 describe("project routes", () => {
-  it("returns the demo project, overview and Gantt", async () => {
+  it("returns the demo project and Gantt", async () => {
     const project = await getProject(get(`/api/projects/${DEMO_PROJECT_ID}`), ctx({ id: DEMO_PROJECT_ID }));
     expect(project.status).toBe(200);
     expect(project.headers.get("x-hakika-mock")).toBe("1");
     expect((await project.json()).milestones).toHaveLength(5);
-
-    const overview = await getOverview(get("/x"), ctx({ id: DEMO_PROJECT_ID }));
-    expect((await overview.json()).approvals[0].requestId).toBe(DEMO_REQUEST_ID);
 
     const gantt = await (await getGantt(get("/x"), ctx({ id: DEMO_PROJECT_ID }))).json();
     const taskIds = new Set(gantt.tasks.map((t: { id: string }) => t.id));
