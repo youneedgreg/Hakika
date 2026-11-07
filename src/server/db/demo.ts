@@ -1,7 +1,7 @@
 // The demo project: Wanjiru's house in Nyeri, at the start of the story (the foundation is under way).
 // resetDemo() rebuilds it from scratch; Judge Mode's reset and `npm run db:seed` both call it.
 // IDs match src/server/mocks/demo.ts, so the UI keeps working as each route switches from mocks.
-// Everyone and every business here is fictional. Prices are placeholders until Juliet's price sheet.
+// Everyone and every business here is fictional. Cement is priced at KES 1,100 per bag per the handoff sheet.
 
 import { eq, inArray } from "drizzle-orm";
 import type { AnyDb } from "./client";
@@ -23,20 +23,20 @@ const PRICED_ON = "2026-10-20";
 const kes = (shillings: number) => Math.round(shillings * 100);
 
 const priceReferences = [
-  { itemKey: "cement_50kg", description: "Cement, 50 kg bag", unit: "bag", median: 780 },
+  { itemKey: "cement_50kg", description: "Cement, 50 kg bag", unit: "bag", median: 1100 },
   { itemKey: "steel_y12", description: "Y12 steel bar", unit: "bar", median: 1150 },
   { itemKey: "ballast", description: "Ballast", unit: "tonne", median: 2000 },
   { itemKey: "stone_machine_cut", description: "Machine-cut stone", unit: "piece", median: 58 },
   { itemKey: "roofing_sheet", description: "Roofing sheet", unit: "sheet", median: 1050 },
 ];
 
-// Unit prices in KES. Mlima is the cheaper cement supplier, which the story relies on (KES 790 a bag).
+// Unit prices in KES. Both seeded suppliers use the handoff sheet's KES 1,100 cement price.
 const supplierPrices: Record<string, Record<string, number>> = {
   [DEMO.supplierIds.mlima]: {
-    cement_50kg: 790, steel_y12: 1180, ballast: 2100, stone_machine_cut: 60, roofing_sheet: 1040,
+    cement_50kg: 1100, steel_y12: 1180, ballast: 2100, stone_machine_cut: 60, roofing_sheet: 1040,
   },
   [DEMO.supplierIds.kiawara]: {
-    cement_50kg: 820, steel_y12: 1150, ballast: 1950, stone_machine_cut: 57, roofing_sheet: 1100,
+    cement_50kg: 1100, steel_y12: 1150, ballast: 1950, stone_machine_cut: 57, roofing_sheet: 1100,
   },
 };
 

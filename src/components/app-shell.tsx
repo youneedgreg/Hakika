@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center gap-6 px-5 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-5 sm:py-4">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span
               aria-hidden
@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
             Hakika
           </Link>
-          <nav aria-label="Main" className="flex gap-1">
+          <nav aria-label="Main" className="flex flex-wrap gap-1">
             {navItems.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-5 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-5 sm:py-8">{children}</main>
     </div>
   );
 }
