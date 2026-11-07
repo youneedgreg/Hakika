@@ -6,6 +6,8 @@ import { eq } from "drizzle-orm";
 import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
+import { isProofKeyword } from "@/server/proofs/codes";
+import { answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
 import type { MediaFile } from "./media";
 import { renderTemplate, type PlainTemplateKey } from "./templates";
 
@@ -90,10 +92,30 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
     }
   }
 
+  // Proof replies and photos never reach the reading models: they are matched in code.
+  if (!message.unsupported && message.kind === "text" && isProofKeyword(message.text)) {
+    await answerProofKeyword(deps, contact, message);
+    return stored.id;
+  }
+  if (!message.unsupported && message.kind === "image" && file) {
+    const taken = await takeWhatsAppProof(deps, contact, stored.id, file);
+    if (taken !== "no_open_request") {
+      await replyWithTemplate(deps, contact, message, PROOF_REPLIES[taken]);
+      return stored.id;
+    }
+  }
+  if (!message.unsupported && message.kind === "location") await attachLocationPin(deps, contact, stored.id);
+
   await replyWithTemplate(deps, contact, message, template);
   await deps.afterReply?.({ contact, messageId: stored.id, message, file });
   return stored.id;
 }
+
+const PROOF_REPLIES = {
+  recorded: "proof_photo_received",
+  unreadable_image: "needs_info",
+  too_late: "request_received",
+} as const satisfies Record<string, PlainTemplateKey>;
 
 export async function replyWithTemplate(
   deps: Pick<IntakeDeps, "db" | "send">,
