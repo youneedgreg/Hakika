@@ -88,7 +88,7 @@ describe("a quote photo from the foreman", () => {
     const request = await sendPhoto(deps);
 
     expect(request).toMatchObject({
-      status: "checked", projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter,
+      status: "awaiting_approval", projectId: DEMO.projectId, milestoneId: "m2", contactId: DEMO.contactIds.peter,
       quotedSupplierId: null, quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 6_500_000,
       recommendedSupplierId: DEMO.supplierIds.kiawara, recommendedTotalKesCents: 5_500_000,
     });
@@ -180,7 +180,7 @@ describe("the owner's summary", () => {
     const { deps, models } = setup(fakeModels({ explainFindings: vi.fn(async () => text) }));
     const request = await sendPhoto(deps);
 
-    expect(request).toMatchObject({ status: "awaiting_approval", summary: text });
+    expect(request).toMatchObject({ status: "awaiting_approval", summary:"Peter Mwangi sent a quote from Baraka Hardware for KES 65,000. Kiawara Builders Supplies, a verified supplier, can supply the order for KES 55,000."});
     expect(models.explainFindings).toHaveBeenCalledWith(expect.objectContaining({
       sentBy: "Peter Mwangi, the foreman on site", quotedSupplier: "a supplier Hakika has not verified", quotedTotal: "KES 47,500",
       recommended: { supplier: "Mlima Hardware", total: "KES 39,500" },
@@ -194,7 +194,7 @@ describe("the owner's summary", () => {
     const request = await sendPhoto(deps);
 
     expect(request.status).toBe("awaiting_approval");
-    expect(request.summary).toContain("KES 47,500");
+    expect(request.summary).toContain("KES 65,000");
     expect((await sent(request.id))?.data).toEqual({
       summarySource: "template", summaryRejected: { reason: "unknown_number", text },
     });
