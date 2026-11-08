@@ -2,14 +2,14 @@
 
 **Who:** Greg owns everything behind the screen. Juliet owns everything judges see and hear.
 **Our submit deadline:** Wed 11 Nov, 11:59pm Nairobi. Devpost closes Thu 12 Nov, 11:00pm; treat that as a buffer only.
-**Last updated:** Sat 7 Nov 2026.
+**Last updated:** Sun 8 Nov 2026.
 
 > **Status: proposed.** These dates still need agreeing between Greg and Juliet. They fit about 20 days of Greg's planned work and all of Juliet's remaining build into 11 days, so they are very tight. If a gate slips, use the [cut order](#if-a-gate-slips).
 >
-> **Where we are, 7 Nov:**
+> **Where we are, 8 Nov:**
 > - **Greg's routes through Sat 7 Nov are merged, plus Judge Mode logic from Sun 8 Nov.** The quote pipeline and owner summary landed 2–3 Nov ([#10](https://github.com/youneedgreg/Hakika/pull/10), [#13](https://github.com/youneedgreg/Hakika/pull/13)). On 7 Nov, `main` gained PayPal orders ([#15](https://github.com/youneedgreg/Hakika/pull/15)), webhooks and the money trail ([#23](https://github.com/youneedgreg/Hakika/pull/23)), proof codes and upload ([#24](https://github.com/youneedgreg/Hakika/pull/24)), the verification engine ([#25](https://github.com/youneedgreg/Hakika/pull/25)), Nova vision and holds ([#22](https://github.com/youneedgreg/Hakika/pull/22)), the milestone flow with labour payment and override ([#26](https://github.com/youneedgreg/Hakika/pull/26)), and the Judge Mode scenario runner ([#21](https://github.com/youneedgreg/Hakika/pull/21)). CI passes on `main`.
 > - **Gate 1 passed in local testing on 6 Nov**, not yet on the hosted demo. **Gate 2 has not been run:** the full loop on the hosted demo with real phones is the next job, and it is a day late.
-> - **Juliet's template copy and price sheet** merged on 7 Nov ([#14](https://github.com/youneedgreg/Hakika/pull/14)). Her screens from [#7](https://github.com/youneedgreg/Hakika/pull/7) already call the API routes. Now that those routes are real, each screen needs checking on real data. The Judge Mode page still calls the old simulate route and needs moving to the new scenario and chat routes.
+> - **Juliet's template copy and price sheet** merged on 7 Nov ([#14](https://github.com/youneedgreg/Hakika/pull/14)). The owner screens now cover real project data, approvals, Gantt, proofs, the money trail, Ask Hakika and project details. This feature branch adds labour PayPal actions and return capture, saved override display, photo resizing/HEIC conversion, milestone ledger rows, and Judge Mode's scenario/chat routes. These changes are not merged yet; hosted-demo and real-phone QA remain outstanding.
 > - **Not started:** Ask Hakika (its route is still a stub), the security pass and the AI eval numbers.
 
 ## Workflow

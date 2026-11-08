@@ -31,8 +31,8 @@ describe("ledgerToCsv", () => {
       },
     ]);
     expect(csv.split("\r\n")).toEqual([
-      "at,kind,description,amount,currency,amount_usd,paypal_order_id,paypal_capture_id,request_id,proof_id",
-      '2026-10-03T15:20:00Z,payment,"Labour, excavation",60000.00,KES,464.40,ORDER1,CAPTURE1,,',
+      "at,kind,description,amount,currency,amount_usd,paypal_order_id,paypal_capture_id,request_id,proof_id,milestone_id",
+      '2026-10-03T15:20:00Z,payment,"Labour, excavation",60000.00,KES,464.40,ORDER1,CAPTURE1,,,',
       "",
     ]);
   });

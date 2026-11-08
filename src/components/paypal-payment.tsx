@@ -2,54 +2,56 @@
 
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { useState } from "react";
+import { AsyncView } from "@/components/async-view";
 import { apiRequest, postJson } from "@/lib/api-client";
-import type { CaptureResult, CreateOrderResult } from "@/shared/api";
+import { useApi } from "@/lib/use-api";
+import type { CreateOrderResult, PaymentCaptureResult, PayPalConfig } from "@/shared/api";
 
-const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+type PaymentTarget = { requestId: string } | { milestoneId: string };
 
-// The browser names the request only. The server computes the amount and PayPal enforces it.
+// The browser names what is paid for only; the server computes the amount and payee.
 export function PayPalPayment({
-  requestId,
-  onPaid,
+  target,
+  onCaptured,
 }: {
-  requestId: string;
-  onPaid: (result: CaptureResult) => void;
+  target: PaymentTarget;
+  onCaptured: (result: PaymentCaptureResult) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-
-  if (!clientId) {
-    return <p className="text-sm text-muted">PayPal sandbox is not configured on this deployment yet.</p>;
-  }
+  const { state, reload } = useApi<PayPalConfig>("/api/payments/config");
 
   return (
-    <div className="space-y-3">
-      <PayPalScriptProvider options={{ clientId, currency: "USD", intent: "capture" }}>
-        <PayPalButtons
-          style={{ layout: "vertical", label: "pay" }}
-          createOrder={async () => {
-            setError(null);
-            const response = await postJson<CreateOrderResult>("/api/payments/orders", { requestId });
-            return response.data.orderId;
-          }}
-          onApprove={async (data) => {
-            try {
-              const response = await apiRequest<CaptureResult>(
-                `/api/payments/orders/${encodeURIComponent(data.orderID)}/capture`,
-                { method: "POST" },
-              );
-              onPaid(response.data);
-            } catch {
-              setError("We could not confirm the payment. Check the money trail before trying again.");
-            }
-          }}
-          onError={() => setError("PayPal did not finish. Try again.")}
-        />
-      </PayPalScriptProvider>
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+    <AsyncView state={state} reload={reload}>
+      {(config) => config.clientId ? (
+        <div className="space-y-3">
+          <PayPalScriptProvider options={{ clientId: config.clientId, currency: "USD", intent: "capture" }}>
+            <PayPalButtons
+              style={{ layout: "vertical", label: "pay" }}
+              createOrder={async () => {
+                setError(null);
+                const response = await postJson<CreateOrderResult>("/api/payments/orders", target);
+                return response.data.orderId;
+              }}
+              onApprove={async (data) => {
+                try {
+                  const response = await apiRequest<PaymentCaptureResult>(
+                    `/api/payments/orders/${encodeURIComponent(data.orderID)}/capture`,
+                    { method: "POST" },
+                  );
+                  onCaptured(response.data);
+                } catch (caught) {
+                  setError(caught instanceof Error ? caught.message : "We could not confirm the payment. Check the money trail before trying again.");
+                }
+              }}
+              onCancel={() => setError("Payment cancelled. No payment was captured.")}
+              onError={() => setError("PayPal did not finish. Try again.")}
+            />
+          </PayPalScriptProvider>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        </div>
+      ) : (
+        <p className="text-sm text-muted">PayPal sandbox is not configured on this deployment yet.</p>
       )}
-    </div>
+    </AsyncView>
   );
 }

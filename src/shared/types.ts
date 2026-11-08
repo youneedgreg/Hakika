@@ -53,6 +53,7 @@ export type ProofReview = {
   checks: ProofCheck[];
   outcome: "verified" | "needs_fresh_proof" | "suspicious";
   explanation: string;
+  override?: { reason: string; at: string };
 };
 
 export type GanttTask = {

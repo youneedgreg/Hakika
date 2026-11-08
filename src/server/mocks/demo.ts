@@ -3,7 +3,7 @@
 // so it is a showcase, not one moment of the story. All people and businesses are fictional.
 
 import type {
-  ChatResult, GanttData, LedgerRow, ProjectDetails, ProjectOverview, ProofCapture,
+  ChatResult, GanttData, ProjectDetails, ProjectOverview, ProofCapture,
 } from "@/shared/api";
 import type { ApprovalCard, ProofReview } from "@/shared/types";
 
@@ -226,33 +226,6 @@ export const overview: ProjectOverview = {
     paymentsCount: 2,
   },
 };
-
-export const ledgerRows: LedgerRow[] = [
-  {
-    at: "2026-10-03T15:20:00Z", kind: "payment",
-    description: "Excavation labour paid to Otieno",
-    amount: { amount: "60000.00", currency: "KES" }, amountUsd: { amount: "464.40", currency: "USD" },
-    paypalOrderId: "MOCK0RDER00000001", paypalCaptureId: "MOCKCAPTURE0000001",
-    link: {},
-  },
-  {
-    at: "2026-10-12T09:02:00Z", kind: "payment",
-    description: "Ballast and Y12 steel paid to Kiawara Builders Supplies",
-    amount: { amount: "125000.00", currency: "KES" }, amountUsd: { amount: "967.49", currency: "USD" },
-    paypalOrderId: "MOCK0RDER00000002", paypalCaptureId: "MOCKCAPTURE0000002",
-    link: {},
-  },
-  {
-    at: "2026-10-24T10:12:00Z", kind: "verdict",
-    description: "Cement delivery proof verified",
-    link: { proofId: DEMO_PROOF_IDS.verified },
-  },
-  {
-    at: "2026-10-26T16:40:00Z", kind: "verdict",
-    description: "Foundation progress proof suspicious; labour payment held",
-    link: { proofId: DEMO_PROOF_IDS.suspicious },
-  },
-];
 
 export const chatAnswer: ChatResult = {
   answer:

@@ -15,6 +15,7 @@ const kindLabel: Record<LedgerRow["kind"], string> = {
   proof: "Proof",
   verdict: "Verdict",
   override: "Override",
+  milestone: "Milestone",
 };
 
 export default function MoneyTrailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,7 +39,7 @@ export default function MoneyTrailPage({ params }: { params: Promise<{ id: strin
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <caption className="sr-only">Every request, payment, proof and override for this project, in time order</caption>
+              <caption className="sr-only">Every request, payment, proof, override and milestone event for this project, in time order</caption>
               <thead className="text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <th scope="col" className="py-2 pr-4 font-semibold">When</th>
@@ -55,7 +56,9 @@ export default function MoneyTrailPage({ params }: { params: Promise<{ id: strin
                     ? `/requests/${row.link.requestId}`
                     : row.link.proofId
                       ? `/proofs/${row.link.proofId}`
-                      : null;
+                      : row.link.milestoneId
+                        ? `/projects/${id}/gantt?milestone=${encodeURIComponent(row.link.milestoneId)}`
+                        : null;
                   return (
                     <tr key={`${row.at}-${row.kind}-${row.description}`} className="align-top">
                       <td className="py-3 pr-4 whitespace-nowrap text-muted">{formatDateTime(row.at)}</td>

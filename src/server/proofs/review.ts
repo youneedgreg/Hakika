@@ -42,6 +42,9 @@ export async function loadProofReview(deps: ProofDeps, proofId: string): Promise
     outcome: verdict.outcome,
     explanation: verdict.explanation,
   };
+  if (verdict.overriddenAt && verdict.overrideReason) {
+    review.override = { reason: verdict.overrideReason, at: verdict.overriddenAt.toISOString() };
+  }
   if (proof.captureLat != null && proof.captureLng != null) {
     // A WhatsApp pin has no accuracy; the contract needs a number, so 0 stands for "none reported".
     review.capture = { lat: proof.captureLat, lng: proof.captureLng, accuracyM: proof.accuracyM ?? 0 };

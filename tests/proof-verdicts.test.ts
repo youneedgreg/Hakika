@@ -15,6 +15,7 @@ import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { submitCaptureProof, type CaptureDeps } from "@/server/proofs/capture";
 import { milestoneHold } from "@/server/proofs/holds";
+import { overrideVerdict } from "@/server/proofs/override";
 import { issueProofRequest } from "@/server/proofs/requests";
 import { isWellFormedProofId, loadProofReview, proofImageResponse } from "@/server/proofs/review";
 import { verifyProof, verifyStoredProof } from "@/server/proofs/verdicts";
@@ -502,6 +503,17 @@ describe("the proof review and photo", () => {
     expect((await loadProofReview({ db }, proofId))?.outcome).toBe("needs_fresh_proof");
     await loadProofReview({ db }, proofId);
     expect(await db.select().from(s.verdicts)).toHaveLength(1);
+  });
+
+  it("includes the owner's saved override reason and time", async () => {
+    const { link } = await deliveryWithCode(0);
+    const proofId = await upload(6, link.token, await photo(1));
+    expect(await overrideVerdict({ db, now: at(10) }, proofId, "Checked the delivery receipt.")).toMatchObject({ ok: true });
+
+    expect(await loadProofReview({ db }, proofId)).toMatchObject({
+      outcome: "needs_fresh_proof",
+      override: { reason: "Checked the delivery receipt.", at: at(10)().toISOString() },
+    });
   });
 
   it("streams the photo privately, with the stored content type", async () => {

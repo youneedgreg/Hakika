@@ -531,7 +531,7 @@ describe("WhatsApp confirmations after a supplier is paid", () => {
       [DEMO.contactIds.peter, "materials_paid_foreman", "sw", null],
       [DEMO.contactIds.grace, "materials_paid_supplier", "en", "SM-1"],
     ]));
-    expect(messages.find((m) => m.contactId === DEMO.contactIds.peter)?.body).toContain("Mlima Hardware KES 39,500");
+    expect(messages.find((m) => m.contactId === DEMO.contactIds.peter)?.body).toContain("Mlima Hardware kiasi cha KES 39,500");
     const [row] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.action, "payment.confirmations"));
     expect(row).toMatchObject({ paymentId: payment.id, description: "WhatsApp confirmations of this payment: 1 of 2 sent." });
   });
@@ -582,11 +582,15 @@ describe("the money trail (GET /api/ledger)", () => {
       .toBeLessThan(rows.indexOf(captured!));
   });
 
-  it("leaves out milestone events, which the UI contract has no kind for yet", async () => {
+  it("includes milestone events and their timeline link", async () => {
     const rows = (await loadLedger(db, DEMO.projectId))!;
     const seeded = await db.select().from(s.auditEvents).where(eq(s.auditEvents.kind, "milestone"));
     expect(seeded.length).toBeGreaterThan(0);
-    expect(rows.some((row) => seeded.some((event) => event.description === row.description))).toBe(false);
+    expect(rows).toContainEqual(expect.objectContaining({
+      kind: "milestone",
+      description: seeded[0].description,
+      link: { milestoneId: seeded[0].milestoneId },
+    }));
   });
 
   it("exports the same rows as CSV", async () => {

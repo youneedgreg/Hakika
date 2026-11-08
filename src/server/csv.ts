@@ -4,14 +4,14 @@ import type { LedgerRow } from "@/shared/api";
 
 const LEDGER_COLUMNS = [
   "at", "kind", "description", "amount", "currency", "amount_usd",
-  "paypal_order_id", "paypal_capture_id", "request_id", "proof_id",
+  "paypal_order_id", "paypal_capture_id", "request_id", "proof_id", "milestone_id",
 ] as const;
 
 export function ledgerToCsv(rows: LedgerRow[]): string {
   const lines = rows.map((r) =>
     [
       r.at, r.kind, r.description, r.amount?.amount, r.amount?.currency, r.amountUsd?.amount,
-      r.paypalOrderId, r.paypalCaptureId, r.link.requestId, r.link.proofId,
+      r.paypalOrderId, r.paypalCaptureId, r.link.requestId, r.link.proofId, r.link.milestoneId,
     ].map(csvCell).join(","),
   );
   return [LEDGER_COLUMNS.join(","), ...lines].join("\r\n") + "\r\n";
