@@ -23,6 +23,7 @@
     "@ai-sdk/amazon-bedrock": "5.0.130",
     "@bryntum/gantt": "npm:@bryntum/gantt-trial@7.3.8",
     "@neondatabase/serverless": "1.2.0",
+    "@paypal/agent-toolkit": "1.11.0",
     "@paypal/react-paypal-js": "10.6.1",
     "@vercel/blob": "2.8.2",
     "ai": "7.0.159",

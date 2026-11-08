@@ -1,4 +1,5 @@
-// Ask Hakika's tools. Every one only reads, and each is bound to the project the server chose: the
+// Ask Hakika's tools. Every one only reads (the PayPal one through the Agent Toolkit, its method
+// fixed as get_order: see paypal-order.ts), and each is bound to the project the server chose: the
 // model can't name a project, and nothing here can create, change or pay for anything.
 //
 // The tools return text that Hakika's own code wrote (statuses, amounts, check results, the money
@@ -10,9 +11,10 @@
 // answer can only cite records the tools actually returned, with labels and links code wrote.
 
 import { tool, type ToolSet } from "ai";
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { looksLikeInstructions } from "@/server/ai/nova";
+import { type OrderLookup, orderSummary, PAYPAL_ORDER_ID, toolkitOrderLookup } from "./paypal-order";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
 import { centsToAmount, formatKes } from "@/server/pricing/money";
@@ -49,7 +51,11 @@ export type ProjectTools = {
   records: Map<string, Citation>;
 };
 
-export function projectTools(db: AnyDb, projectId: string): ProjectTools {
+export function projectTools(
+  db: AnyDb,
+  projectId: string,
+  { lookupOrder = toolkitOrderLookup() }: { lookupOrder?: OrderLookup } = {},
+): ProjectTools {
   const records = new Map<string, Citation>();
   const cite = (ref: string, citation: Citation) => {
     records.set(ref, citation);
@@ -323,6 +329,31 @@ export function projectTools(db: AnyDb, projectId: string): ProjectTools {
             ...(milestoneOf(row.link.milestoneId) ? { milestone: milestoneOf(row.link.milestoneId) } : {}),
           })),
         };
+      },
+    }),
+    get_paypal_order: tool({
+      description:
+        "What PayPal itself says about one of this project's payments: the order's status, amount and captures. " +
+        "Takes a PayPal order ID from list_payments. Use it to confirm a payment with PayPal.",
+      inputSchema: z.object({
+        orderId: z.string().regex(PAYPAL_ORDER_ID).describe("A PayPal order ID from list_payments"),
+      }),
+      execute: async ({ orderId }) => {
+        // Only an order this project's own payments recorded: never an ID the model made up.
+        const [payment] = await db.select().from(s.payments)
+          .where(and(eq(s.payments.projectId, projectId), eq(s.payments.paypalOrderId, orderId)));
+        if (!payment) return { found: false, orderId };
+        const milestones = await milestoneNames();
+        const forRecord = payment.requestId
+          ? (await requestRefs([payment.requestId], milestones)).get(payment.requestId) ?? null
+          : payment.milestoneId && milestones.has(payment.milestoneId)
+            ? milestoneRef(payment.milestoneId, milestones.get(payment.milestoneId)!) : null;
+        const recorded = { status: payment.status, amountUsd: usd(payment.amountUsdCents), paypalCaptureId: payment.paypalCaptureId };
+        try {
+          return { found: true, orderId, for: forRecord, recorded, paypal: orderSummary(await lookupOrder(orderId)) };
+        } catch {
+          return { found: true, orderId, for: forRecord, recorded, paypal: "PayPal could not be reached for this order." };
+        }
       },
     }),
   } satisfies ToolSet;
