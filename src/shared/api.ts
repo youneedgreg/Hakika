@@ -50,6 +50,8 @@ export type DeclineResult = { requestId: string; status: "declined" };
 // for: a request (materials, to the supplier) or a verified milestone (labour, to the fundi).
 export type CreateOrderBody = { requestId: string } | { milestoneId: string };
 export type CreateOrderResult = { orderId: string };
+export type PayPalConfig = { clientId: string | null };
+export type PaymentCaptureResult = CaptureResult | LabourCaptureResult;
 
 // POST /api/payments/orders/[orderId]/capture — CaptureResult for a request's order,
 // LabourCaptureResult for a milestone's (tell them apart by requestId or milestoneId).
@@ -82,13 +84,13 @@ export type ChatResult = { answer: string; citations: { label: string; href: str
 // GET /api/ledger?projectId=…&format=csv
 export type LedgerRow = {
   at: string;
-  kind: "request" | "payment" | "proof" | "verdict" | "override";
+  kind: "request" | "payment" | "proof" | "verdict" | "override" | "milestone";
   description: string;
   amount?: Money;
   amountUsd?: Money;
   paypalOrderId?: string;
   paypalCaptureId?: string;
-  link: { requestId?: string; proofId?: string };
+  link: { requestId?: string; proofId?: string; milestoneId?: string };
 };
 export type LedgerResult = { rows: LedgerRow[] };
 

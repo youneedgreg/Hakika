@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { AsyncView } from "@/components/async-view";
 import { Button } from "@/components/ui/button";
 import { ProofPhoto } from "@/components/ui/proof-photo";
@@ -10,6 +10,46 @@ import { useApi } from "@/lib/use-api";
 import type { ProofCapture, ProofUploadResult } from "@/shared/api";
 
 const LOCATION_MESSAGE = "Location is off or blocked. Turn on location for this browser, then send the photo again.";
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGE_SIDE = 1600;
+
+async function preparePhoto(file: File): Promise<Blob> {
+  let source: Blob = file;
+  if (/image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) {
+    try {
+      const { default: convertHeic } = await import("heic2any");
+      const converted = await convertHeic({ blob: file, toType: "image/jpeg", quality: 0.88 });
+      source = Array.isArray(converted) ? converted[0] : converted;
+    } catch {
+      throw new Error("This photo could not be converted. Choose another photo or set your camera to JPEG.");
+    }
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(source, { imageOrientation: "from-image" });
+  } catch {
+    throw new Error("This photo format could not be opened. Choose a JPEG, PNG or WebP photo.");
+  }
+
+  try {
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This photo could not be prepared. Choose another photo.");
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of [0.88, 0.78, 0.68, 0.58, 0.48]) {
+      const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+      if (jpeg && jpeg.size <= MAX_IMAGE_BYTES) return jpeg;
+    }
+    throw new Error("This photo is still too large. Choose a smaller photo.");
+  } finally {
+    bitmap.close();
+  }
+}
 
 // Called straight from the tap, so the browser treats it as a user request.
 function currentPosition(): Promise<GeolocationPosition> {
@@ -40,11 +80,16 @@ export default function PhoneProofPage({ params }: { params: Promise<{ token: st
 }
 
 function ProofForm({ token, capture }: { token: string; capture: ProofCapture }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<Blob | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview);
+  }, [preview]);
 
   if (sent) {
     return (
@@ -69,7 +114,7 @@ function ProofForm({ token, capture }: { token: string; capture: ProofCapture })
         try {
           const position = await positionRequest;
           const body = new FormData();
-          body.append("image", file);
+          body.append("image", file, "proof.jpg");
           body.append("latitude", String(position.coords.latitude));
           body.append("longitude", String(position.coords.longitude));
           body.append("accuracy", String(position.coords.accuracy));
@@ -106,9 +151,20 @@ function ProofForm({ token, capture }: { token: string; capture: ProofCapture })
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] ?? null);
+          disabled={preparing}
+          onChange={async (event) => {
+            const selected = event.target.files?.[0];
+            setFile(null);
             setError(null);
+            if (!selected) return;
+            setPreparing(true);
+            try {
+              setFile(await preparePhoto(selected));
+            } catch (caught) {
+              setError(caught instanceof Error ? caught.message : "This photo could not be prepared. Choose another photo.");
+            } finally {
+              setPreparing(false);
+            }
           }}
           className="block w-full text-base file:mr-4 file:rounded-full file:border-0 file:bg-brand-soft file:px-5 file:py-3 file:font-semibold file:text-brand-strong"
         />
@@ -124,8 +180,8 @@ function ProofForm({ token, capture }: { token: string; capture: ProofCapture })
         </p>
       )}
 
-      <Button type="submit" disabled={!file || sending} className="h-14 w-full text-base">
-        {sending ? "Sending…" : "Send photo"}
+      <Button type="submit" disabled={!file || sending || preparing} className="h-14 w-full text-base">
+        {preparing ? "Preparing photo…" : sending ? "Sending…" : "Send photo"}
       </Button>
     </form>
   );

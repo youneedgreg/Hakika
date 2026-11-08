@@ -249,7 +249,7 @@ describe("fresh proof after a photo fails", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe(PETER_PHONE);
     expect(codeIn(sent[0].body)).toBeUndefined(); // Swahili copy
-    expect(sent[0].body).toContain(`Nambari yako mpya ni ${renewed.code}`);
+    expect(sent[0].body).toContain(`Nambari mpya ya uthibitisho ni ${renewed.code}`);
     // Says what's needed, never why. The link is left out: its random token can contain "km".
     expect(sent[0].body.replace(/https?:\/\/\S+/g, "")).not.toMatch(/km|location check|suspicious/i);
     const [message] = await outbound("fresh_proof_request");
@@ -505,7 +505,7 @@ describe("paying the fundi's labour", () => {
     }, payment.id);
 
     expect(outcomes).toEqual([{ contactId: DEMO.contactIds.otieno, sent: true }]);
-    expect(sent.at(-1)).toEqual({ to: OTIENO_PHONE, body: "Hakika: mwenye nyumba amekulipa KES 85,000 kupitia PayPal kwa Foundation. Asante." });
+    expect(sent.at(-1)).toEqual({ to: OTIENO_PHONE, body: "Hakika: mmiliki wa mradi amekulipa KES 85,000 kupitia PayPal kwa kazi ya Foundation. Asante." });
     expect((await actions("payment.confirmations"))[0]).toMatchObject({ milestoneId: "m2", requestId: null });
   });
 

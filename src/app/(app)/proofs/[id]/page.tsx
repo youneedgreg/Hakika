@@ -55,7 +55,10 @@ function ProofReviewView({ proof, onOverridden }: { proof: ProofReview; onOverri
           <p className="text-sm text-muted">Received {formatDateTime(proof.receivedAt)}</p>
           <h2 className="text-2xl font-semibold">Proof review</h2>
         </div>
-        <StatusPill status={proof.outcome} />
+        <div className="flex flex-wrap items-center gap-2">
+          {proof.override && <span className="text-sm font-semibold text-brand-strong">Accepted by owner</span>}
+          <StatusPill status={proof.outcome} />
+        </div>
       </header>
 
       <p className="text-sm leading-relaxed">{proof.explanation}</p>
@@ -82,7 +85,16 @@ function ProofReviewView({ proof, onOverridden }: { proof: ProofReview; onOverri
             <CheckList items={checks} />
           </Card>
 
-          {proof.outcome !== "verified" && <OverrideDialog proofId={proof.proofId} onOverridden={onOverridden} />}
+          {proof.override && (
+            <Card title="Owner override">
+              <p className="text-sm leading-relaxed">{proof.override.reason}</p>
+              <p className="mt-2 text-xs text-muted">Saved {formatDateTime(proof.override.at)}</p>
+            </Card>
+          )}
+
+          {proof.outcome !== "verified" && !proof.override && (
+            <OverrideDialog proofId={proof.proofId} onOverridden={onOverridden} />
+          )}
         </div>
       </div>
     </div>

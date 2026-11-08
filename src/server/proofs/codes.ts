@@ -36,8 +36,7 @@ export function isWellFormedToken(token: string): boolean {
 // exactly (ignoring case, spaces and trailing punctuation), never read by a model.
 const PROOF_KEYWORDS = new Set(["PROOF", "THIBITISHA"]);
 
-// The words a foreman replies with when a milestone's work is finished. The Swahili word needs
-// Juliet's check.
+// The words a foreman replies with when a milestone's work is finished.
 const DONE_KEYWORDS = new Set(["DONE", "IMEKAMILIKA"]);
 
 function keyword(text: string | undefined): string | null {

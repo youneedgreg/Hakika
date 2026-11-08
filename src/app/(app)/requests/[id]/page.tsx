@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AsyncView } from "@/components/async-view";
 import { PayPalPayment } from "@/components/paypal-payment";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Money } from "@/components/ui/money";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ErrorState } from "@/components/ui/states";
-import { postJson } from "@/lib/api-client";
+import { apiRequest, postJson, toApiClientError } from "@/lib/api-client";
 import { useApi } from "@/lib/use-api";
 import type { ApprovalCard, Finding } from "@/shared/types";
 import type { CaptureResult, DeclineResult } from "@/shared/api";
@@ -22,12 +23,34 @@ const severityTone: Record<Finding["severity"], string> = {
 export default function ApprovalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { state, reload } = useApi<ApprovalCard>(`/api/requests/${id}`);
-  const [paid, setPaid] = useState<CaptureResult | null>(null);
+  const searchParams = useSearchParams();
+  const paypalStatus = searchParams.get("paypal");
+  const returnedOrderId = searchParams.get("token");
+  const returnHandled = useRef<string | null>(null);
+  const [capture, setCapture] = useState<CaptureResult | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (paypalStatus !== "approved" || !returnedOrderId || returnHandled.current === returnedOrderId) return;
+    returnHandled.current = returnedOrderId;
+    let active = true;
+    apiRequest<CaptureResult>(`/api/payments/orders/${encodeURIComponent(returnedOrderId)}/capture`, { method: "POST" }).then(
+      ({ data }) => {
+        if (!active) return;
+        setCapture(data);
+        reload();
+      },
+      (error: unknown) => {
+        if (active) setCaptureError(toApiClientError(error).message);
+      },
+    );
+    return () => { active = false; };
+  }, [paypalStatus, returnedOrderId, reload]);
 
   return (
     <AsyncView state={state} reload={reload}>
       {(card) => {
-        const status = paid?.status ?? card.status;
+        const status = capture?.status ?? card.status;
         return (
           <div className="space-y-6">
             <header className="flex flex-wrap items-start justify-between gap-3">
@@ -40,20 +63,32 @@ export default function ApprovalPage({ params }: { params: Promise<{ id: string 
               <StatusPill status={status} />
             </header>
 
-            {paid && (
+            {capture?.status === "paid" && (
               <div role="status" className="rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm text-brand-strong">
                 Payment captured. The money trail will show it shortly.
               </div>
             )}
+            {capture?.status === "approved" && (
+              <div role="status" className="rounded-xl border border-info/30 bg-info-soft px-4 py-3 text-sm text-info">
+                Payment processing. PayPal has approved the order but has not completed the capture yet.
+              </div>
+            )}
+            {paypalStatus === "cancelled" && (
+              <div role="status" className="rounded-xl border border-line bg-paper px-4 py-3 text-sm text-muted">
+                Payment cancelled. No payment was captured.
+              </div>
+            )}
+            {paypalStatus === "approved" && !returnedOrderId && (
+              <ErrorState body="PayPal returned without an order reference. Check the money trail before trying again." />
+            )}
+            {captureError && <ErrorState body={captureError} />}
 
             <p className="text-sm leading-relaxed">{card.summary}</p>
 
             <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
               <div className="space-y-6">
                 <Card title="Quote lines">
-                  <p className="mb-3 text-xs leading-relaxed text-muted">
-                    Demo prices only. Replace these placeholder references with Juliet&apos;s approved price sheet.
-                  </p>
+                  <p className="mb-3 text-xs leading-relaxed text-muted">Reference prices are indicative for this demo.</p>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[480px] text-left text-sm">
                       <thead className="text-xs uppercase tracking-wide text-muted">
@@ -131,12 +166,15 @@ export default function ApprovalPage({ params }: { params: Promise<{ id: string 
                   )}
                 </Card>
 
-                {status === "awaiting_approval" && card.recommended && !paid && (
+                {status === "awaiting_approval" && card.recommended && !capture && (
                   <Card title="Approve payment">
                     <p className="mb-4 text-sm text-muted">
                       You will be asked to approve <Money value={card.recommended.totalUsd} /> in PayPal.
                     </p>
-                    <PayPalPayment requestId={card.requestId} onPaid={(result) => { setPaid(result); reload(); }} />
+                    <PayPalPayment target={{ requestId: card.requestId }} onCaptured={(result) => {
+                      if ("requestId" in result) setCapture(result);
+                      reload();
+                    }} />
                     <DeclineForm requestId={card.requestId} onDeclined={reload} />
                   </Card>
                 )}

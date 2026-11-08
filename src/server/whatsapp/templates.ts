@@ -1,6 +1,5 @@
 // Fixed messages to people on site. The model never writes free text to a foreman, fundi or supplier.
-// This copy is a placeholder until Juliet's English and Swahili templates arrive; the Swahili of the
-// payment confirmations, the proof messages, the fresh-proof request and labour_paid still needs her check.
+// Fixed English and Swahili copy for owner-approved payments and proof requests.
 //
 // A {slot} is filled only with values the server takes from the database (an amount, a supplier's
 // name), never with model output or anything a message said.
@@ -25,23 +24,23 @@ const TEMPLATES = {
   // To the foreman who asked for the materials.
   materials_paid_foreman: {
     en: "Hakika: the owner has paid {supplier} {amount} through PayPal for your materials request. {supplier} will arrange the delivery. When it arrives, reply PROOF to get your proof code.",
-    sw: "Hakika: mwenye nyumba amelipa {supplier} {amount} kupitia PayPal kwa ombi lako la vifaa. {supplier} watapanga usafirishaji. Mzigo ukifika, jibu THIBITISHA upate nambari ya uthibitisho.",
+    sw: "Hakika: mmiliki wa mradi amelipa {supplier} kiasi cha {amount} kupitia PayPal kwa ombi lako la vifaa. {supplier} atapanga usafirishaji. Mzigo ukifika, jibu THIBITISHA upate nambari ya uthibitisho.",
   },
   // To the supplier's own contact.
   materials_paid_supplier: {
     en: "Hakika: {amount} has been paid to {supplier} through PayPal for a materials order. Please arrange the delivery to the site.",
-    sw: "Hakika: {amount} zimelipwa kwa {supplier} kupitia PayPal kwa oda ya vifaa. Tafadhali panga usafirishaji hadi eneo la ujenzi.",
+    sw: "Hakika: kiasi cha {amount} kimelipwa kwa {supplier} kupitia PayPal kwa oda ya vifaa. Tafadhali panga usafirishaji hadi eneo la ujenzi.",
   },
   // The one-time code and capture link. {link} is the only place the link's token appears; the copy
   // stored in messages has it hidden.
   proof_request: {
     en: "Hakika: your proof code for {milestone} is {code}. Write it on paper or on the delivered goods, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
-    sw: "Hakika: nambari yako ya uthibitisho kwa {milestone} ni {code}. Iandike kwenye karatasi au kwenye mzigo uliofika, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa, kisha tuma mahali ulipo (location).",
+    sw: "Hakika: nambari yako ya uthibitisho kwa {milestone} ni {code}. Iandike kwenye karatasi au kwenye mzigo uliofika, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa WhatsApp, kisha tuma eneo ulipo.",
   },
   // A proof photo sent in the chat (for people who can't open the link).
   proof_photo_received: {
     en: "Hakika: we received your proof photo. If you have not shared your location yet, share it now.",
-    sw: "Hakika: tumepokea picha yako ya uthibitisho. Kama bado hujatuma mahali ulipo (location), itume sasa.",
+    sw: "Hakika: tumepokea picha yako ya uthibitisho. Ikiwa bado hujatuma mahali ulipo, tafadhali tuma sasa.",
   },
   // A PROOF reply when nothing is waiting for proof.
   no_proof_due: {
@@ -57,12 +56,12 @@ const TEMPLATES = {
   // needed, never why the last photo failed, and never accuses anyone.
   fresh_proof_request: {
     en: "Hakika: we need a new proof photo for {milestone}. Your new code is {code}. Write it on paper, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
-    sw: "Hakika: tunahitaji picha mpya ya uthibitisho kwa {milestone}. Nambari yako mpya ni {code}. Iandike kwenye karatasi, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa, kisha tuma mahali ulipo (location).",
+    sw: "Hakika: tunahitaji picha mpya ya uthibitisho kwa {milestone}. Nambari mpya ya uthibitisho ni {code}. Iandike kwenye karatasi, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa WhatsApp, kisha tuma eneo ulipo.",
   },
   // To the fundi, once the owner has paid their labour for a verified milestone.
   labour_paid: {
     en: "Hakika: the owner has paid you {amount} through PayPal for {milestone}. Thank you.",
-    sw: "Hakika: mwenye nyumba amekulipa {amount} kupitia PayPal kwa {milestone}. Asante.",
+    sw: "Hakika: mmiliki wa mradi amekulipa {amount} kupitia PayPal kwa kazi ya {milestone}. Asante.",
   },
 } as const satisfies Record<string, Record<Language, string>>;
 
