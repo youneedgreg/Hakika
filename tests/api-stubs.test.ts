@@ -9,6 +9,7 @@ import { GET as getRequest } from "@/app/api/requests/[id]/route";
 import { POST as declineRequest } from "@/app/api/requests/[id]/decline/route";
 import { POST as createOrder } from "@/app/api/payments/orders/route";
 import { POST as captureOrder } from "@/app/api/payments/orders/[orderId]/capture/route";
+import { GET as getPayPalConfig } from "@/app/api/payments/config/route";
 import { GET as getProofLink, POST as uploadProof } from "@/app/api/proof/[token]/route";
 import { GET as getProof } from "@/app/api/proofs/[id]/route";
 import { GET as getProofImage } from "@/app/api/proofs/[id]/image/route";
@@ -25,8 +26,13 @@ import {
   DEMO_PROJECT_ID, DEMO_PROOF_IDS, DEMO_PROOF_TOKEN, DEMO_REQUEST_ID,
 } from "@/server/mocks/demo";
 
-// Handlers run without a server here, so work scheduled for after the response is skipped.
-vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: vi.fn() }));
+// Handlers run without a server here, so work scheduled for after the response is skipped, and
+// connection() (which marks a route as per-request) has no request scope to wait on.
+vi.mock("next/server", async (original) => ({
+  ...(await original<typeof import("next/server")>()),
+  after: vi.fn(),
+  connection: vi.fn(async () => {}),
+}));
 
 const BASE = "http://localhost:3000";
 
@@ -240,5 +246,32 @@ describe("the PayPal webhook", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
     vi.unstubAllEnvs();
+  });
+});
+
+describe("the PayPal config (GET /api/payments/config)", () => {
+  async function clientIdWith(env: Record<string, string>) {
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    const res = await getPayPalConfig();
+    vi.unstubAllEnvs();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    return (await res.json()).clientId;
+  }
+
+  it("gives the public client ID when the sandbox is fully set up, and never the secret", async () => {
+    const res = await clientIdWith({ PAYPAL_ENV: "sandbox", PAYPAL_CLIENT_ID: "public-id", PAYPAL_CLIENT_SECRET: "the-secret" });
+    expect(res).toBe("public-id");
+  });
+
+  it("gives null when the secret is missing or the environment isn't the sandbox", async () => {
+    expect(await clientIdWith({ PAYPAL_ENV: "sandbox", PAYPAL_CLIENT_ID: "public-id", PAYPAL_CLIENT_SECRET: "" })).toBeNull();
+    expect(await clientIdWith({ PAYPAL_ENV: "live", PAYPAL_CLIENT_ID: "public-id", PAYPAL_CLIENT_SECRET: "the-secret" })).toBeNull();
+  });
+
+  it("reads the environment per request, not once at build time", async () => {
+    const { connection } = await import("next/server");
+    vi.mocked(connection).mockClear();
+    await getPayPalConfig();
+    expect(connection).toHaveBeenCalledTimes(1);
   });
 });
