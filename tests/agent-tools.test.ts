@@ -8,46 +8,13 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrderLookup } from "@/server/agent/paypal-order";
 import { projectTools, WITHHELD } from "@/server/agent/tools";
-import { shrinkForModel } from "@/server/ai/proof-vision";
-import { DEMO, resetDemo } from "@/server/db/demo";
+import { DEMO } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
-import { readJudgeMedia } from "@/server/judge/media";
-import { type JudgeRecordings, replayModels } from "@/server/judge/replay";
-import committed from "@/server/judge/recordings.json";
-import { type JudgeDeps, runScenario } from "@/server/judge/scenarios";
+import { demoStory } from "./helpers/demo-story";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 
-let stored: Map<string, Uint8Array>;
-const judge = (): JudgeDeps => ({
-  db,
-  models: replayModels(committed as JudgeRecordings),
-  readMedia: (name) => readJudgeMedia(name),
-  storeMedia: async (path, file) => {
-    stored.set(path, file.bytes);
-    return path;
-  },
-  readPhoto: async (path) => {
-    const bytes = stored.get(path);
-    return bytes ? shrinkForModel(bytes) : null;
-  },
-  rate: async () => ({ kesPerUsd: "129.980973" }),
-  linkBase: "https://tryhakika.vercel.app",
-});
-
-async function freshDemo() {
-  await db.delete(s.messages);
-  await db.delete(s.auditEvents);
-  await db.delete(s.payments);
-  await db.delete(s.requests);
-  await resetDemo(db, { otieno: "otieno@personal.example.com", mlima: "mlima@business.example.com" });
-}
-
-async function playStory() {
-  await runScenario(judge(), "inflated-quote");
-  await runScenario(judge(), "valid-delivery");
-  await runScenario(judge(), "recycled-photo");
-}
+const story = demoStory(db);
 
 // PayPal is never called from these tests: each one says what the order lookup returns.
 let lookupOrder: ReturnType<typeof vi.fn<OrderLookup>>;
@@ -82,8 +49,7 @@ beforeEach(async () => {
   lookupOrder = vi.fn<OrderLookup>(async () => {
     throw new Error("PayPal isn't called in these tests unless a test says what it returns.");
   });
-  stored = new Map();
-  await freshDemo();
+  await story.fresh();
 });
 
 afterEach(() => {
@@ -134,7 +100,7 @@ describe("the tools", () => {
 });
 
 describe("after the demo story", () => {
-  beforeEach(playStory, 60_000);
+  beforeEach(() => story.play(), 60_000);
 
   it("explain the held foundation: the suspicious proof with its failed checks", async () => {
     const { tools, records } = toolsFor(DEMO.projectId);

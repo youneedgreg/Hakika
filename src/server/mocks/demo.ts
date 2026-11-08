@@ -3,7 +3,7 @@
 // so it is a showcase, not one moment of the story. All people and businesses are fictional.
 
 import type {
-  ChatResult, GanttData, ProjectDetails, ProjectOverview, ProofCapture,
+  GanttData, ProjectDetails, ProjectOverview, ProofCapture,
 } from "@/shared/api";
 import type { ApprovalCard, ProofReview } from "@/shared/types";
 
@@ -227,10 +227,3 @@ export const overview: ProjectOverview = {
   },
 };
 
-export const chatAnswer: ChatResult = {
-  answer:
-    "The foundation payment is held because the progress photo failed three hard checks: it has no " +
-    "code, it matches a photo from 5 October, and it was taken 41 km from the site. Peter has a new " +
-    "code for fresh proof.",
-  citations: [{ label: "Proof review: foundation progress", href: `/proofs/${DEMO_PROOF_IDS.suspicious}` }],
-};
