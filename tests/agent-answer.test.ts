@@ -10,6 +10,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { NextRequest } from "next/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { answerProblem, answerQuestion, NO_RECORD, UNCHECKED } from "@/server/agent/answer";
+import { hashIp, LIMIT_MESSAGES, QUESTIONS_PER_IP_HOUR } from "@/server/agent/limits";
 import { projectTools } from "@/server/agent/tools";
 import { DEMO } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
@@ -181,8 +182,15 @@ describe("answering", () => {
 
 describe("POST /api/agent/chat", () => {
   const post = (body: unknown) => chat(new NextRequest("http://localhost:3000/api/agent/chat", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { "content-type": "application/json", "x-vercel-forwarded-for": "203.0.113.7" }, body: JSON.stringify(body),
   }));
+  const noModel = () => {
+    throw new Error("The model shouldn't be asked.");
+  };
+
+  beforeEach(async () => {
+    await db.delete(s.agentQuestions);
+  });
 
   it("returns only the answer and its citations", async () => {
     routeModel.current = scriptedNova([{ tools: ["money_trail"] }, { text: "NO_RECORD" }]).model;
@@ -193,10 +201,24 @@ describe("POST /api/agent/chat", () => {
   });
 
   it("says when the project doesn't exist, without asking the model", async () => {
-    routeModel.current = () => {
-      throw new Error("The model shouldn't be asked.");
-    };
+    routeModel.current = noModel;
     expect((await post({ projectId: "no-such-project", question: "Anything?" })).status).toBe(404);
+    expect(await db.$count(s.agentQuestions)).toBe(0);
+  });
+
+  it("counts each question, and answers 429 without asking the model once an IP is over its limit", async () => {
+    routeModel.current = scriptedNova([{ text: "NO_RECORD" }]).model;
+    expect((await post({ projectId: DEMO.projectId, question: "Who is the architect?" })).status).toBe(200);
+    expect(await db.$count(s.agentQuestions)).toBe(1);
+
+    await db.insert(s.agentQuestions).values(Array.from({ length: QUESTIONS_PER_IP_HOUR - 1 }, () => ({
+      projectId: DEMO.projectId, ipHash: hashIp("203.0.113.7"),
+    })));
+    routeModel.current = noModel;
+    const res = await post({ projectId: DEMO.projectId, question: "And now?" });
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("900");
+    expect((await res.json()).error).toMatchObject({ code: "too_many_questions", message: LIMIT_MESSAGES.ip });
   });
 
   it("answers 503 when the model fails", async () => {

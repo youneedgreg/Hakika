@@ -303,3 +303,13 @@ export const webhookEvents = pgTable("webhook_events", {
   receivedAt: createdAt(),
   processedAt: timestamp({ withTimezone: true }),
 }, (t) => [unique("webhook_events_provider_event_id_unique").on(t.provider, t.eventId)]);
+
+// Ask Hakika's questions, counted so the public demo can't spend the model allowance. Only when and
+// from where (an IP address, hashed with a secret key): never the question. Kept for 2 days.
+// No foreign key: resetting the demo project mustn't reset the count.
+export const agentQuestions = pgTable("agent_questions", {
+  id: text().primaryKey().$defaultFn(() => newId("aq")),
+  projectId: text().notNull(),
+  ipHash: text().notNull(),
+  askedAt: createdAt(),
+}, (t) => [index().on(t.askedAt), index().on(t.ipHash, t.askedAt)]);

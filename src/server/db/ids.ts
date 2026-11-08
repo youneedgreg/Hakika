@@ -21,6 +21,7 @@ export const ID_PREFIXES = {
   message: "msg",
   auditEvent: "aud",
   webhookEvent: "whe",
+  agentQuestion: "aq",
 } as const;
 
 export function newId(prefix: (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES]): string {
