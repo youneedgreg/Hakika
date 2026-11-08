@@ -38,7 +38,43 @@
       }
     }
   },
-  "summary": null,
+  "summary": {
+    "facts": {
+      "sentBy": "Peter Mwangi, the foreman on site",
+      "quotedSupplier": "a supplier Hakika has not verified",
+      "quotedTotal": "KES 65,000",
+      "recommended": {
+        "supplier": "Kiawara Builders Supplies",
+        "total": "KES 55,000"
+      },
+      "findings": [
+        {
+          "type": "price_above_market",
+          "severity": "warn",
+          "numbers": {
+            "quoted": "1300.00",
+            "median": "1100.00",
+            "percentAbove": 18
+          }
+        },
+        {
+          "type": "unverified_supplier",
+          "severity": "warn",
+          "numbers": {}
+        },
+        {
+          "type": "cheaper_verified_supplier",
+          "severity": "info",
+          "numbers": {
+            "total": "55000.00",
+            "saving": "10000.00"
+          }
+        }
+      ]
+    },
+    "text": "Peter Mwangi, the foreman on site, sent the quote for KES 65,000 from a supplier Hakika has not verified. The quote is higher than the market price, and there is a verified supplier, Kiawara Builders Supplies, who can provide the materials for KES 55,000."
+  },
+  "summaryRecordedAt": "2026-11-08T05:20:49.741Z",
   "inspections": [
     {
       "media": "judge/delivery-cement-coded.jpg",
