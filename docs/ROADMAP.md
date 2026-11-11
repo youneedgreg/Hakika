@@ -2,15 +2,15 @@
 
 **Who:** Greg owns everything behind the screen. Juliet owns everything judges see and hear.
 **Our submit deadline:** Wed 11 Nov, 11:59pm Nairobi. Devpost closes Thu 12 Nov, 11:00pm; treat that as a buffer only.
-**Last updated:** Sun 8 Nov 2026.
+**Last updated:** Wed 11 Nov 2026.
 
 > **Status: proposed.** These dates still need agreeing between Greg and Juliet. They fit about 20 days of Greg's planned work and all of Juliet's remaining build into 11 days, so they are very tight. If a gate slips, use the [cut order](#if-a-gate-slips).
 >
-> **Where we are, 8 Nov:**
-> - **Greg's routes through Sat 7 Nov are merged, plus Judge Mode logic from Sun 8 Nov.** The quote pipeline and owner summary landed 2–3 Nov ([#10](https://github.com/youneedgreg/Hakika/pull/10), [#13](https://github.com/youneedgreg/Hakika/pull/13)). On 7 Nov, `main` gained PayPal orders ([#15](https://github.com/youneedgreg/Hakika/pull/15)), webhooks and the money trail ([#23](https://github.com/youneedgreg/Hakika/pull/23)), proof codes and upload ([#24](https://github.com/youneedgreg/Hakika/pull/24)), the verification engine ([#25](https://github.com/youneedgreg/Hakika/pull/25)), Nova vision and holds ([#22](https://github.com/youneedgreg/Hakika/pull/22)), the milestone flow with labour payment and override ([#26](https://github.com/youneedgreg/Hakika/pull/26)), and the Judge Mode scenario runner ([#21](https://github.com/youneedgreg/Hakika/pull/21)). CI passes on `main`.
-> - **Gate 1 passed in local testing on 6 Nov**, not yet on the hosted demo. **Gate 2 has not been run:** the full loop on the hosted demo with real phones is the next job, and it is a day late.
-> - **Juliet's template copy and price sheet** merged on 7 Nov ([#14](https://github.com/youneedgreg/Hakika/pull/14)). The owner screens now cover real project data, approvals, Gantt, proofs, the money trail, Ask Hakika and project details. This feature branch adds labour PayPal actions and return capture, saved override display, photo resizing/HEIC conversion, milestone ledger rows, and Judge Mode's scenario/chat routes. These changes are not merged yet; hosted-demo and real-phone QA remain outstanding.
-> - **Not started:** Ask Hakika (its route is still a stub), the security pass and the AI eval numbers.
+> **Where we are, 11 Nov:**
+> - **The main app and API work through PR #31 is merged.** This includes the quote pipeline and owner summary ([#10](https://github.com/youneedgreg/Hakika/pull/10), [#13](https://github.com/youneedgreg/Hakika/pull/13)), PayPal orders and webhooks ([#15](https://github.com/youneedgreg/Hakika/pull/15), [#23](https://github.com/youneedgreg/Hakika/pull/23)), proof codes and verification ([#24](https://github.com/youneedgreg/Hakika/pull/24), [#25](https://github.com/youneedgreg/Hakika/pull/25)), milestone payments and override ([#26](https://github.com/youneedgreg/Hakika/pull/26)), Judge Mode ([#21](https://github.com/youneedgreg/Hakika/pull/21)), and Juliet's owner-facing contract/UI updates ([#30](https://github.com/youneedgreg/Hakika/pull/30)).
+> - **Gate 1 passed locally on 6 Nov.** Gate 2 was last recorded as not run; confirm the hosted money/proof loop with real phones before recording or dress rehearsal.
+> - **Juliet's application work is merged.** The landing page exists, and the README now has local screenshots of the landing page and sample project details. No Swahili voice-note fixture is present in `tests/fixtures`; confirm or provide one. Remaining work: hosted phone QA and a bug list, then screen recording, rough cut, captions/voiceover, picture lock, YouTube publication and Devpost copy. Recording/publishing status is not verifiable from this repository.
+> - **Still open on Greg's lane:** Ask Hakika's route, the security pass and AI eval numbers. Local data-backed pages also need a configured database to run; coordinate environment setup before QA.
 
 ## Workflow
 
@@ -47,13 +47,13 @@ flowchart TB
     J1["Merged 7 Nov, PR #14<br/>Template copy, price sheet, photos.<br/>Swahili voice notes: not seen yet"]:::done
     J2["Merged 2 Nov, PR #7<br/>Overview page,<br/>approval card, PayPal button"]:::done
     J3["Merged 2 Nov, PR #7<br/>Bryntum Gantt<br/>on mock data"]:::done
-    J4["Now: routes are real<br/>Approval card on real routes,<br/>money trail page"]:::now
-    J5["Fri 6 Nov<br/>Proof capture page,<br/>proof review page"]:::next
-    J6["Sat 7 Nov<br/>Gantt on real data,<br/>alerts and override dialog"]:::next
-    J7["Sun 8 Nov<br/>Judge Mode interface,<br/>Ask panel, project details"]:::next
-    J8["Mon 9 Nov<br/>Phone QA, landing page, README visuals,<br/>screen recordings from the evening"]:::next
-    J9["Tue 10 Nov<br/>Rough cut, captions,<br/>final voiceover"]:::next
-    J10["Wed 11 Nov<br/>Picture lock, YouTube Public,<br/>Devpost description"]:::next
+    J4["Done, merged PR #30<br/>Real-route approval card,<br/>money trail"]:::done
+    J5["Done, merged PR #30<br/>Proof capture and<br/>proof review"]:::done
+    J6["Done, merged PR #30<br/>Real-data Gantt, alerts<br/>and override dialog"]:::done
+    J7["Done, merged PR #30<br/>Judge Mode, Ask panel,<br/>project details"]:::done
+    J8["Now, Wed 11 Nov<br/>Hosted phone QA, bug list,<br/>recording checks"]:::now
+    J9["Still needed<br/>Rough cut under 3:00,<br/>captions, final voiceover"]:::next
+    J10["Due today<br/>Picture lock, YouTube Public,<br/>Devpost description"]:::now
     J0 --> J1 --> J2 --> J3 --> J4 --> J5 --> J6 --> J7 --> J8 --> J9 --> J10
   end
 

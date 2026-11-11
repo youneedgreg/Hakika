@@ -85,8 +85,8 @@ export default function ApprovalPage({ params }: { params: Promise<{ id: string 
 
             <p className="text-sm leading-relaxed">{card.summary}</p>
 
-            <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-              <div className="space-y-6">
+            <div className="grid min-w-0 gap-6 lg:grid-cols-[2fr_1fr]">
+              <div className="min-w-0 space-y-6">
                 <Card title="Quote lines">
                   <p className="mb-3 text-xs leading-relaxed text-muted">Reference prices are indicative for this demo.</p>
                   <div className="overflow-x-auto">
