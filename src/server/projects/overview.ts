@@ -1,8 +1,8 @@
 // The owner's dashboard, from the database. Approvals and alerts here are the in-app notification:
-// a request reaching awaiting_approval shows up on them. Held payments and overdue proofs join the
-// alerts when proofs are built. Alert text is written by code or by the price check, never by a model.
+// a request reaching awaiting_approval shows up on them, and so does a milestone held by a failed
+// proof. Alert text is written by code or by the price check, never by a model.
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { AnyDb } from "@/server/db/client";
 import * as s from "@/server/db/schema";
 import { centsToAmount } from "@/server/pricing/money";
@@ -58,7 +58,7 @@ export async function loadOverview(db: AnyDb, projectId: string): Promise<Projec
         createdAt: request.createdAt.toISOString(),
       };
     }),
-    alerts: await loadAlerts(db, projectId, requests),
+    alerts: await loadAlerts(db, projectId, requests, milestones),
     ledger: {
       spent: kes(captured.reduce((sum, payment) => sum + payment.amountKesCents, 0)),
       spentUsd: usd(captured.reduce((sum, payment) => sum + payment.amountUsdCents, 0)),
@@ -78,8 +78,30 @@ async function loadAlerts(
   db: AnyDb,
   projectId: string,
   requests: (typeof s.requests.$inferSelect)[],
+  milestones: (typeof s.milestones.$inferSelect)[],
 ): Promise<Alert[]> {
   const alerts: Alert[] = [];
+
+  // A milestone held by a failed proof (its own, or a delivery's on it): payments on it are refused
+  // until fresh proof passes or the owner overrides. Links to the latest proof that wasn't accepted.
+  const heldIds = milestones
+    .filter((m) => m.status === "held" || requests.some((r) => r.milestoneId === m.id && r.status === "held"))
+    .map((m) => m.id);
+  const failed = heldIds.length === 0 ? [] : await db.select({ proofId: s.proofs.id, milestoneId: s.proofRequests.milestoneId })
+    .from(s.proofs)
+    .innerJoin(s.proofRequests, eq(s.proofRequests.id, s.proofs.proofRequestId))
+    .innerJoin(s.verdicts, eq(s.verdicts.proofId, s.proofs.id))
+    .where(and(inArray(s.proofRequests.milestoneId, heldIds), ne(s.verdicts.outcome, "verified"), isNull(s.verdicts.overriddenAt)))
+    .orderBy(desc(s.proofs.receivedAt));
+  for (const milestoneId of heldIds) {
+    const name = milestones.find((m) => m.id === milestoneId)?.name ?? "A milestone";
+    const proofId = failed.find((row) => row.milestoneId === milestoneId)?.proofId;
+    alerts.push({
+      id: `held-${milestoneId}`, kind: "payment_held", severity: "block",
+      message: `${name} is held: a proof photo failed its checks, so payments for it are refused until fresh proof passes or you override with a reason.`,
+      link: proofId ? { proofId } : {},
+    });
+  }
 
   // A request waiting on the owner: its most serious finding.
   const waitingIds = requests.filter((request) => request.status === "awaiting_approval").map((request) => request.id);

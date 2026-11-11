@@ -1,7 +1,7 @@
 "use client";
 
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AsyncView } from "@/components/async-view";
 import { apiRequest, postJson } from "@/lib/api-client";
 import { useApi } from "@/lib/use-api";
@@ -18,6 +18,9 @@ export function PayPalPayment({
   onCaptured: (result: PaymentCaptureResult) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  // The server's own reason when it refused to create the order (a held milestone, a missing
+  // payee): PayPal then calls onError, which must not replace it with a generic line.
+  const serverError = useRef<string | null>(null);
   const { state, reload } = useApi<PayPalConfig>("/api/payments/config");
 
   return (
@@ -29,8 +32,14 @@ export function PayPalPayment({
               style={{ layout: "vertical", label: "pay" }}
               createOrder={async () => {
                 setError(null);
-                const response = await postJson<CreateOrderResult>("/api/payments/orders", target);
-                return response.data.orderId;
+                serverError.current = null;
+                try {
+                  const response = await postJson<CreateOrderResult>("/api/payments/orders", target);
+                  return response.data.orderId;
+                } catch (caught) {
+                  serverError.current = caught instanceof Error ? caught.message : null;
+                  throw caught;
+                }
               }}
               onApprove={async (data) => {
                 try {
@@ -44,7 +53,7 @@ export function PayPalPayment({
                 }
               }}
               onCancel={() => setError("Payment cancelled. No payment was captured.")}
-              onError={() => setError("PayPal did not finish. Try again.")}
+              onError={() => setError(serverError.current ?? "PayPal did not finish. Try again.")}
             />
           </PayPalScriptProvider>
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}

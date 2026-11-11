@@ -9,6 +9,7 @@ import type { AnyDb } from "@/server/db/client";
 import { newId } from "@/server/db/ids";
 import * as s from "@/server/db/schema";
 import { isDoneKeyword, isProofKeyword } from "@/server/proofs/codes";
+import { verifyStoredProof } from "@/server/proofs/verdicts";
 import { answerDoneKeyword, answerProofKeyword, attachLocationPin, takeWhatsAppProof } from "@/server/proofs/whatsapp";
 import type { MediaFile } from "./media";
 import { renderTemplate, type PlainTemplateKey } from "./templates";
@@ -108,14 +109,28 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
     await answerDoneKeyword(deps, contact, message);
     return stored.id;
   }
+  // The person is answered before the proof is verified, so a fresh code sent for a failed photo
+  // comes after "we received your photo" in the chat.
   if (!message.unsupported && message.kind === "image" && file) {
     const taken = await takeWhatsAppProof(deps, contact, stored.id, file);
-    if (taken !== "no_open_request") {
-      await replyWithTemplate(deps, contact, message, PROOF_REPLIES[taken]);
+    if (taken.outcome === "recorded") {
+      await replyWithTemplate(deps, contact, message, taken.located ? "proof_photo_and_location_received" : "proof_photo_received");
+      await verifyStoredProof(deps, taken.proofId);
+      return stored.id;
+    }
+    if (taken.outcome !== "no_open_request") {
+      await replyWithTemplate(deps, contact, message, PROOF_REPLIES[taken.outcome]);
       return stored.id;
     }
   }
-  if (!message.unsupported && message.kind === "location") await attachLocationPin(deps, contact, stored.id);
+  if (!message.unsupported && message.kind === "location") {
+    const proofId = await attachLocationPin(deps, contact, stored.id);
+    if (proofId) {
+      await replyWithTemplate(deps, contact, message, "proof_location_received");
+      await verifyStoredProof(deps, proofId);
+      return stored.id;
+    }
+  }
 
   await replyWithTemplate(deps, contact, message, template);
   await deps.afterReply?.({ contact, messageId: stored.id, message, file });
@@ -123,7 +138,6 @@ export async function processInbound(deps: IntakeDeps, contact: Contact, message
 }
 
 const PROOF_REPLIES = {
-  recorded: "proof_photo_received",
   unreadable_image: "needs_info",
   too_late: "request_received",
 } as const satisfies Record<string, PlainTemplateKey>;

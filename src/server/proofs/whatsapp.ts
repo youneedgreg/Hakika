@@ -9,7 +9,6 @@ import type { MediaFile } from "@/server/whatsapp/media";
 import { renderTemplate } from "@/server/whatsapp/templates";
 import { dHash, UnreadableImage } from "./dhash";
 import { findDeliveryDue, findMilestoneDue, issueProofRequest, openProofRequestFor, recordProof, type ProofDeps } from "./requests";
-import { verifyStoredProof } from "./verdicts";
 
 type Contact = typeof s.siteContacts.$inferSelect;
 
@@ -96,24 +95,30 @@ async function reply(
   });
 }
 
-// A photo from a contact with an open code becomes that code's proof. Returns false when there is
-// no open code, so the caller reads the photo as a quote instead.
+export type WhatsAppProofOutcome =
+  | { outcome: "recorded"; proofId: string; located: boolean } // located: a pin shared just before it
+  | { outcome: "no_open_request" | "unreadable_image" | "too_late" };
+
+// A photo from a contact with an open code becomes that code's proof. "no_open_request" when there
+// is no open code, so the caller reads the photo as a quote instead. The proof is stored, not yet
+// verified: the caller answers the person first, then calls verifyStoredProof, so a fresh code
+// (sent when the photo fails) comes after "we received your photo", not before it.
 export async function takeWhatsAppProof(
   deps: ProofDeps,
   contact: Contact,
   messageId: string,
   file: MediaFile,
-): Promise<"recorded" | "no_open_request" | "unreadable_image" | "too_late"> {
+): Promise<WhatsAppProofOutcome> {
   const open = await openProofRequestFor(deps, contact.id);
-  if (!open) return "no_open_request";
+  if (!open) return { outcome: "no_open_request" };
 
   const [message] = await deps.db.select().from(s.messages).where(eq(s.messages.id, messageId));
-  if (!message?.mediaPath) return "unreadable_image";
+  if (!message?.mediaPath) return { outcome: "unreadable_image" };
   let hash: string;
   try {
     hash = await dHash(file.bytes);
   } catch (error) {
-    if (error instanceof UnreadableImage) return "unreadable_image";
+    if (error instanceof UnreadableImage) return { outcome: "unreadable_image" };
     throw error;
   }
 
@@ -135,16 +140,16 @@ export async function takeWhatsAppProof(
     dhash: hash,
     capture: pin?.latitude != null && pin.longitude != null ? { lat: pin.latitude, lng: pin.longitude, accuracyM: null } : null,
   });
-  if ("problem" in result) return "too_late";
-  await verifyStoredProof(deps, result.proofId);
-  return "recorded";
+  if ("problem" in result) return { outcome: "too_late" };
+  return { outcome: "recorded", proofId: result.proofId, located: pin?.latitude != null && pin.longitude != null };
 }
 
 // A location pin from a contact who sent a WhatsApp proof photo without one in the last few
-// minutes: the pin becomes that proof's capture point. WhatsApp pins carry no accuracy.
-export async function attachLocationPin(deps: ProofDeps, contact: Contact, messageId: string): Promise<boolean> {
+// minutes: the pin becomes that proof's capture point. WhatsApp pins carry no accuracy. Returns the
+// proof's ID, or null when the pin belongs to no proof; the caller answers, then re-verifies it.
+export async function attachLocationPin(deps: ProofDeps, contact: Contact, messageId: string): Promise<string | null> {
   const [pin] = await deps.db.select().from(s.messages).where(eq(s.messages.id, messageId));
-  if (pin?.latitude == null || pin.longitude == null) return false;
+  if (pin?.latitude == null || pin.longitude == null) return null;
 
   const [proof] = await deps.db.select({ id: s.proofs.id, projectId: s.proofs.projectId, proofRequestId: s.proofs.proofRequestId })
     .from(s.proofs)
@@ -156,12 +161,12 @@ export async function attachLocationPin(deps: ProofDeps, contact: Contact, messa
       gte(s.proofs.receivedAt, new Date(pin.createdAt.getTime() - PIN_WINDOW_MS)),
     ))
     .orderBy(desc(s.proofs.receivedAt)).limit(1);
-  if (!proof) return false;
+  if (!proof) return null;
 
   const updated = await deps.db.update(s.proofs).set({ captureLat: pin.latitude, captureLng: pin.longitude })
     .where(and(eq(s.proofs.id, proof.id), isNull(s.proofs.captureLat)))
     .returning({ id: s.proofs.id });
-  if (!updated.length) return false; // another pin got there first
+  if (!updated.length) return null; // another pin got there first
   await deps.db.insert(s.auditEvents).values({
     projectId: proof.projectId,
     kind: "proof",
@@ -171,6 +176,5 @@ export async function attachLocationPin(deps: ProofDeps, contact: Contact, messa
     proofId: proof.id,
     data: { proofRequestId: proof.proofRequestId, messageId },
   });
-  await verifyStoredProof(deps, proof.id); // the location check can now run
-  return true;
+  return proof.id; // the location check can now run
 }

@@ -10,7 +10,7 @@ import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
 import { approvalCard } from "@/server/mocks/demo";
 import { loadApprovalCard } from "@/server/requests/card";
-import { runRequestPipeline, type ReadingModels } from "@/server/requests/pipeline";
+import { currentMilestone, runRequestPipeline, type ReadingModels } from "@/server/requests/pipeline";
 import { findContactById, processInbound, type IntakeDeps } from "@/server/whatsapp/intake";
 import { renderTemplate } from "@/server/whatsapp/templates";
 
@@ -367,5 +367,21 @@ describe("the approval card", () => {
     const noRate = vi.fn();
     expect((await loadApprovalCard(db, request.id, { rate: noRate }))?.recommended).toBeNull();
     expect(noRate).not.toHaveBeenCalled();
+  });
+});
+
+describe("the milestone a new quote goes on", () => {
+  it("stays on a milestone that is held or waiting on proof, not the next planned one", async () => {
+    for (const status of ["in_progress", "awaiting_proof", "held"] as const) {
+      await db.update(s.milestones).set({ status }).where(eq(s.milestones.id, "m2"));
+      expect((await currentMilestone(db, DEMO.projectId))?.id).toBe("m2");
+    }
+  });
+
+  it("moves to the next planned milestone once the current one is verified or paid", async () => {
+    for (const status of ["verified", "paid"] as const) {
+      await db.update(s.milestones).set({ status }).where(eq(s.milestones.id, "m2"));
+      expect((await currentMilestone(db, DEMO.projectId))?.id).toBe("m3");
+    }
   });
 });
