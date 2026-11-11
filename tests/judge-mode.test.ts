@@ -225,6 +225,7 @@ describe("Valid delivery", () => {
     const [code] = await db.select().from(s.proofRequests).where(eq(s.proofRequests.paymentId, payment.id));
     expect(code.code).toBe(JUDGE_DELIVERY_CODE);
     expect(result.verdict).toBe("verified");
+    expect(result.outcome).toBe("Verified. Every check passed.");
     const verdict = await verdictOf(result.proofId!);
     expect(verdict.modelId).toBe(recordedModelId(recordings));
     expect(verdict.checks.find((c) => c.name === "location")?.result).toBe("pass");
@@ -278,6 +279,8 @@ describe("Recycled photo", () => {
     expect(checks).toMatchObject({ duplicate: "fail", location: "fail", code: "fail" });
     expect((await milestone()).status).toBe("held");
     expect(result.outcome).toMatch(/Payments for this milestone are held/);
+    expect(result.outcome).toMatch(/^Suspicious\. /);
+    expect(result.outcome).not.toMatch(/Suspicious\. Suspicious/); // the verdict word once
     expect(result.links.map((l) => l.href)).toEqual([`/proofs/${result.proofId}`, `/projects/${DEMO.projectId}/gantt`]);
 
     const labour = await createOrderForMilestone(db, "m2", { paypal: noPayPal, appUrl: LINK_BASE, rate: async () => ({ kesPerUsd: "129.980973" }) });

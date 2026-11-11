@@ -336,8 +336,12 @@ async function proofResult(db: AnyDb, messageId: string | undefined): Promise<Pa
   if (!row) return { outcome: "The photo wasn't taken as proof. Open the chat to see Hakika's reply.", links: [] };
 
   const hold = await milestoneHold(db, row.milestoneId);
-  const words = { verified: "Verified", needs_fresh_proof: "Needs fresh proof", suspicious: "Suspicious" } as const;
-  const verdict = row.outcome ? `${words[row.outcome]}. ${row.explanation}` : "The photo is stored but not checked yet.";
+  // explainOutcome already starts a failed verdict with its word ("Suspicious.", "Fresh proof
+  // needed."); only "Every check passed." needs the verdict named.
+  const words = { verified: "Verified.", needs_fresh_proof: "Fresh proof needed.", suspicious: "Suspicious." } as const;
+  const verdict = !row.outcome ? "The photo is stored but not checked yet."
+    : row.outcome === "verified" || !row.explanation ? `${words[row.outcome]} ${row.explanation ?? ""}`.trim()
+    : row.explanation;
   return {
     outcome: hold ? `${verdict} ${HELD_MESSAGE}` : verdict,
     proofId: row.proofId,
