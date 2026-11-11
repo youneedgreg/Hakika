@@ -188,10 +188,15 @@ function audit(
   });
 }
 
-async function currentMilestone(db: AnyDb, projectId: string) {
+// The milestone a new quote belongs to: the first one still under way (in progress, waiting on
+// proof, or held), else the next planned one. A held milestone keeps its quotes, so its hold
+// blocks them, rather than the quote slipping onto the next milestone and its materials plan.
+const UNDER_WAY = new Set(["in_progress", "awaiting_proof", "held"]);
+
+export async function currentMilestone(db: AnyDb, projectId: string) {
   const milestones = await db.select().from(s.milestones)
     .where(eq(s.milestones.projectId, projectId)).orderBy(asc(s.milestones.position));
-  return milestones.find((m) => m.status === "in_progress") ?? milestones.find((m) => m.status === "planned") ?? null;
+  return milestones.find((m) => UNDER_WAY.has(m.status)) ?? milestones.find((m) => m.status === "planned") ?? null;
 }
 
 async function storedMediaPath(db: AnyDb, messageId: string) {
