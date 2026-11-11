@@ -75,7 +75,7 @@ function ProofReviewView({ proof, onOverridden }: { proof: ProofReview; onOverri
             </div>
             <div>
               <dt className="text-muted">Location accuracy</dt>
-              <dd className="font-semibold">{proof.capture ? formatDistance(proof.capture.accuracyM) : "—"}</dd>
+              <dd className="font-semibold">{proof.capture ? (proof.capture.accuracyM === null ? "Not reported" : formatDistance(proof.capture.accuracyM)) : "—"}</dd>
             </div>
           </dl>
         </Card>

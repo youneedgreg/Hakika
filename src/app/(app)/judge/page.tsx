@@ -160,6 +160,12 @@ function ChatMessage({ message }: { message: JudgeChatMessage }) {
         <span>{formatDateTime(message.at)}</span>
       </div>
       {message.text && <p className="mt-1 whitespace-pre-wrap text-sm">{message.text}</p>}
+      {message.textEn && (
+        <p className="mt-1 whitespace-pre-wrap text-sm text-muted">
+          <span className="font-semibold">In English: </span>
+          {message.textEn}
+        </p>
+      )}
       {message.imageUrl && <ProofPhoto src={message.imageUrl} alt={`Photo sent by ${sender}`} className="mt-2 aspect-[4/3] w-full max-w-sm rounded-md" />}
       {message.location && <p className="mt-1 text-sm text-muted">Location: {message.location.lat}, {message.location.lng}</p>}
       {!message.text && !message.imageUrl && !message.location && message.templateKey && (

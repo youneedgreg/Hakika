@@ -48,7 +48,7 @@ export type ProofCheck = {
 
 export type ProofReview = {
   proofId: string; imageUrl: string; receivedAt: string;
-  capture?: { lat: number; lng: number; accuracyM: number };
+  capture?: { lat: number; lng: number; accuracyM: number | null }; // null: not reported (a WhatsApp pin)
   site: { lat: number; lng: number; radiusM: number };
   checks: ProofCheck[];
   outcome: "verified" | "needs_fresh_proof" | "suspicious";

@@ -31,6 +31,9 @@ export async function loadOverview(db: AnyDb, projectId: string): Promise<Projec
   const ids = waiting.map((request) => request.id);
   const lines = ids.length === 0 ? [] : await db.select().from(s.requestLines)
     .where(inArray(s.requestLines.requestId, ids)).orderBy(asc(s.requestLines.position));
+  const supplierIds = [...new Set(waiting.flatMap((request) => request.recommendedSupplierId ?? []))];
+  const supplierNames = new Map((supplierIds.length === 0 ? [] : await db.select({ id: s.suppliers.id, name: s.suppliers.name })
+    .from(s.suppliers).where(inArray(s.suppliers.id, supplierIds))).map((supplier) => [supplier.id, supplier.name]));
 
   const captured = await db.select().from(s.payments)
     .where(and(eq(s.payments.projectId, projectId), eq(s.payments.status, "captured")));
@@ -40,14 +43,21 @@ export async function loadOverview(db: AnyDb, projectId: string): Promise<Projec
     currentMilestone: current
       ? { id: current.id, name: current.name, status: current.status }
       : { id: "", name: "Not set", status: "planned" },
-    approvals: waiting.map((request) => ({
-      requestId: request.id,
-      title: approvalTitle(lines.filter((line) => line.requestId === request.id).map((line) => line.description), request.quotedSupplierName),
-      status: request.status,
-      // What the owner would pay: the recommended supplier's total when there is one.
-      total: kes(request.recommendedTotalKesCents ?? request.quotedTotalKesCents ?? 0),
-      createdAt: request.createdAt.toISOString(),
-    })),
+    approvals: waiting.map((request) => {
+      // What the owner would pay: the recommended supplier's total when there is one, so the title
+      // names that supplier, not the one on the quote.
+      const recommended = request.recommendedTotalKesCents !== null;
+      const supplier = recommended
+        ? (request.recommendedSupplierId ? supplierNames.get(request.recommendedSupplierId) ?? null : null)
+        : request.quotedSupplierName;
+      return {
+        requestId: request.id,
+        title: approvalTitle(lines.filter((line) => line.requestId === request.id).map((line) => line.description), supplier),
+        status: request.status,
+        total: kes(request.recommendedTotalKesCents ?? request.quotedTotalKesCents ?? 0),
+        createdAt: request.createdAt.toISOString(),
+      };
+    }),
     alerts: await loadAlerts(db, projectId, requests),
     ledger: {
       spent: kes(captured.reduce((sum, payment) => sum + payment.amountKesCents, 0)),

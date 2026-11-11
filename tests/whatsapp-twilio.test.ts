@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as simulate } from "@/app/api/judge/simulate/route";
 import { POST as webhook } from "@/app/api/webhooks/twilio/route";
 import { MAX_MEDIA_BYTES, readMediaResponse } from "@/server/whatsapp/media";
-import { renderTemplate, TEMPLATE_KEYS, templateSlots } from "@/server/whatsapp/templates";
+import { renderTemplate, TEMPLATE_KEYS, templateSlots, translateTemplate } from "@/server/whatsapp/templates";
 import {
   fetchTwilioMedia, isValidTwilioSignature, parseTwilioMessage, sendWhatsApp,
 } from "@/server/whatsapp/twilio";
@@ -232,5 +232,21 @@ describe("media and templates", () => {
     expect(renderTemplate("materials_paid_foreman", "sw", params)).not.toMatch(/[{}]/);
     expect(() => renderTemplate("materials_paid_foreman", "en", { supplier: "Mlima Hardware" } as typeof params))
       .toThrow("needs {amount}");
+  });
+
+  it("shows a Swahili template in English for Judge Mode, with the same values and no model", () => {
+    const values: Record<string, string> = {
+      supplier: "Mlima Hardware", amount: "KES 39,500", milestone: "Foundation", code: "H4RK",
+      link: "https://tryhakika.vercel.app/proof/[hidden]",
+    };
+    for (const key of TEMPLATE_KEYS) {
+      const params = Object.fromEntries(templateSlots(key, "en").map((slot) => [slot, values[slot]]));
+      const sw = (renderTemplate as (k: string, l: string, p: object) => string)(key, "sw", params);
+      const en = (renderTemplate as (k: string, l: string, p: object) => string)(key, "en", params);
+      expect(translateTemplate(key, "sw", sw, "en")).toBe(en);
+    }
+    expect(translateTemplate("needs_info", "en", renderTemplate("needs_info", "en"), "en")).toBe(renderTemplate("needs_info", "en"));
+    expect(translateTemplate("needs_info", "sw", "Some other text", "en")).toBeNull();
+    expect(translateTemplate("not_a_template", "sw", "Hakika", "en")).toBeNull();
   });
 });
