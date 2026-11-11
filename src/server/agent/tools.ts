@@ -21,6 +21,7 @@ import { centsToAmount, formatKes } from "@/server/pricing/money";
 import { loadGantt } from "@/server/projects/gantt";
 import { loadLedger } from "@/server/projects/ledger";
 import { loadOverview } from "@/server/projects/overview";
+import { HELD_MESSAGE } from "@/server/proofs/holds";
 import type { ChatResult } from "@/shared/api";
 import type { MilestoneStatus } from "@/shared/types";
 
@@ -122,7 +123,8 @@ export function projectTools(
     project_status: tool({
       description:
         "The project's budget, what has been spent, each milestone with its status and labour payment, " +
-        "and the alerts waiting for the owner. Start here for questions about progress, spending or what is next.",
+        "the requests waiting for the owner's approval, and the alerts. " +
+        "Start here for questions about progress, spending or what is next.",
       inputSchema: noInput,
       execute: async () => {
         const [overview, gantt] = await Promise.all([loadOverview(db, projectId), loadGantt(db, projectId)]);
@@ -135,22 +137,37 @@ export function projectTools(
           milestoneNames(),
           db.select().from(s.milestones).where(eq(s.milestones.projectId, projectId)).orderBy(asc(s.milestones.position)),
         ]);
-        const [alertRequests, alertProofs] = await Promise.all([
+        const [alertRequests, alertProofs, approvalRequests] = await Promise.all([
           requestRefs(overview.alerts.map((alert) => alert.link.requestId), names),
           proofRefs(overview.alerts.map((alert) => alert.link.proofId), names),
+          requestRefs(overview.approvals.map((approval) => approval.requestId), names),
         ]);
         return {
           found: true,
           project: { name: overview.project.name, site: overview.project.siteLabel, owner: overview.project.ownerName },
+          // Budget and spending come from the money trail, so that's what an answer about them cites.
+          spendingRef: trailRef(),
           budget: formatKes(Math.round(Number(overview.ledger.budget.amount) * 100)),
           spent: formatKes(Math.round(Number(overview.ledger.spent.amount) * 100)),
           spentUsd: `USD ${overview.ledger.spentUsd.amount}`,
           paymentsCaptured: overview.ledger.paymentsCount,
+          awaitingApproval: overview.approvals.flatMap((approval) => {
+            const ref = approvalRequests.get(approval.requestId);
+            // No title: it holds the supplier's name as written on the quote. list_requests gives
+            // the details, with an unverified supplier marked as one.
+            return ref ? [{
+              ref,
+              total: formatKes(Math.round(Number(approval.total.amount) * 100)),
+              status: approval.status,
+            }] : [];
+          }),
           currentMilestone: overview.currentMilestone.name,
           milestones: milestones.map((m) => ({
             ref: milestoneRef(m.id, m.name),
             name: m.name,
             status: status.get(m.id) ?? m.status,
+            // Only a failed proof holds a milestone (holds.ts); saying so stops the model guessing.
+            ...((status.get(m.id) ?? m.status) === "held" ? { heldBecause: `${HELD_MESSAGE} list_proofs gives the checks.` } : {}),
             plannedStart: m.plannedStart,
             plannedEnd: m.plannedEnd,
             labour: m.labourKesCents === null ? null : formatKes(m.labourKesCents),

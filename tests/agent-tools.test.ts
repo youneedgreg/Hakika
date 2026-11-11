@@ -78,8 +78,11 @@ describe("the tools", () => {
       spent: "KES 0",
       paymentsCaptured: 0,
       currentMilestone: "Foundation",
+      spendingRef: "money-trail",
+      awaitingApproval: [],
       alerts: [],
     });
+    expect(records.get("money-trail")).toEqual({ label: "Money trail", href: `/projects/${DEMO.projectId}/money` });
     expect(status.milestones).toEqual(expect.arrayContaining([
       expect.objectContaining({ ref: "milestone:m2", name: "Foundation", status: "in_progress", labourPaidTo: "Otieno" }),
     ]));
@@ -102,12 +105,27 @@ describe("the tools", () => {
 describe("after the demo story", () => {
   beforeEach(() => story.play(), 60_000);
 
+  it("list the request waiting for approval, as a ref and total, without the supplier's name as written", async () => {
+    const { tools, records } = toolsFor(DEMO.projectId);
+    const status = await call(tools, "project_status") as { awaitingApproval: { ref: string; total: string; status: string }[] };
+    expect(status.awaitingApproval).toEqual([
+      { ref: expect.stringMatching(/^request:/), total: "KES 55,000", status: "awaiting_approval" },
+    ]);
+    expect(JSON.stringify(status.awaitingApproval)).not.toMatch(/BARAKA/i);
+    const ref = status.awaitingApproval[0].ref;
+    expect(records.get(ref)).toEqual({
+      label: expect.stringMatching(/^Request: Foundation materials, \d{1,2} \w{3}$/),
+      href: `/requests/${ref.slice("request:".length)}`,
+    });
+  });
+
   it("explain the held foundation: the suspicious proof with its failed checks", async () => {
     const { tools, records } = toolsFor(DEMO.projectId);
     const status = await call(tools, "project_status");
     expect(status.milestones).toEqual(expect.arrayContaining([
-      expect.objectContaining({ ref: "milestone:m2", name: "Foundation", status: "held" }),
+      expect.objectContaining({ ref: "milestone:m2", name: "Foundation", status: "held", heldBecause: expect.stringMatching(/a proof photo failed its checks/) }),
     ]));
+    expect((status.milestones as Record<string, unknown>[]).filter((m) => "heldBecause" in m).map((m) => m.name)).toEqual(["Foundation"]);
 
     const { proofs } = await call(tools, "list_proofs") as { proofs: { ref: string; outcome: string; checks: { name: string; result: string; detail: string }[] }[] };
     const suspicious = proofs.find((proof) => proof.outcome === "suspicious")!;
