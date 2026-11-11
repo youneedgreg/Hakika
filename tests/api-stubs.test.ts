@@ -180,11 +180,11 @@ describe("ledger, agent and Judge Mode routes", () => {
     expect((await getLedger(get("/api/ledger"))).status).toBe(400);
   });
 
-  it("answers Ask Hakika with citations", async () => {
-    const res = await chat(post("/x", { projectId: DEMO_PROJECT_ID, question: "Why was the foundation payment held?" }));
-    const body = await res.json();
-    expect(body.answer).toContain("held");
-    expect(body.citations[0].href).toContain(DEMO_PROOF_IDS.suspicious);
+  it("asks for a project and a question before Ask Hakika answers", async () => {
+    // Answers come from the database and Nova: tests/agent-answer.test.ts.
+    expect((await chat(post("/x", { projectId: DEMO_PROJECT_ID }))).status).toBe(400);
+    expect((await chat(post("/x", { projectId: DEMO_PROJECT_ID, question: "   " }))).status).toBe(400);
+    expect((await chat(post("/x", { projectId: DEMO_PROJECT_ID, question: "x".repeat(1001) }))).status).toBe(400);
   });
 
   it("accepts simulated messages and checks what each kind needs", async () => {
