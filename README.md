@@ -26,31 +26,31 @@ Judge Mode sends its messages through the same pipeline as WhatsApp. Its AI outp
 
 ```mermaid
 flowchart LR
-  subgraph Site["On site (Kenya)"]
-    Foreman["Foreman on WhatsApp"]
-    Phone["Proof capture page<br/>(phone browser)"]
+  subgraph SITE["On site in Kenya"]
+    FOREMAN["Foreman on WhatsApp"]
+    PHONE["Proof capture page<br/>on a phone"]
   end
-  subgraph Hakika["Hakika (Next.js on Vercel)"]
-    Webhook["Twilio webhook<br/>signature checked"]
-    Read["Read: Nova reads quotes and photos,<br/>Groq Whisper translates voice notes"]
-    Price["Price check (code)<br/>reference prices, verified suppliers"]
-    Verify["Verification engine (code)<br/>code, freshness, duplicate, location<br/>+ Nova soft checks"]
-    Gate["Holds and payment gates (code)"]
-    Ask["Ask Hakika<br/>read-only tools"]
-    DB[("Neon Postgres<br/>+ private Vercel Blob")]
+  subgraph APP["Hakika: Next.js on Vercel"]
+    HOOK["Twilio webhook,<br/>signature checked"]
+    READ["Nova reads quotes and photos,<br/>Groq Whisper translates voice notes"]
+    PRICE["Price check in code:<br/>reference prices, verified suppliers"]
+    VERIFY["Verification in code:<br/>code, freshness, duplicate, location,<br/>plus Nova soft checks"]
+    GATE["Holds and payment gates in code"]
+    ASK["Ask Hakika,<br/>read-only tools"]
+    DB["Neon Postgres and<br/>private Vercel Blob"]
   end
-  subgraph Owner["Owner abroad"]
-    Dash["Dashboard: approval card,<br/>Gantt, money trail"]
+  subgraph OWNER["Owner abroad"]
+    DASH["Dashboard: approval card,<br/>Gantt, money trail"]
   end
-  PayPal["PayPal Orders v2<br/>payee = supplier or fundi"]
+  PAYPAL["PayPal Orders v2,<br/>supplier or fundi as payee"]
 
-  Foreman --> Webhook --> Read --> Price --> DB
-  Phone --> Verify --> Gate --> DB
-  DB --> Dash
-  Dash -- "owner approves" --> PayPal
-  PayPal -- "signed webhook" --> DB
-  Dash --> Ask --> DB
-  Ask -. "get_order only<br/>(Agent Toolkit)" .-> PayPal
+  FOREMAN --> HOOK --> READ --> PRICE --> DB
+  PHONE --> VERIFY --> GATE --> DB
+  DB --> DASH
+  DASH -->|owner approves| PAYPAL
+  PAYPAL -->|signed webhook| DB
+  DASH --> ASK --> DB
+  ASK -.->|get_order only, Agent Toolkit| PAYPAL
 ```
 
 1. **A request arrives on WhatsApp.** Text, a voice note, a quote photo or a location pin from a known site contact. Voice notes are translated to English by Groq Whisper; Amazon Nova turns a quote photo into line items (item, quantity, unit price in KES, supplier). Replies to people on site are fixed templates in English and Swahili.
