@@ -61,7 +61,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                 ) : (
                   <ul className="divide-y divide-line">
                     {overview.approvals.map((approval) => (
-                      <li key={approval.requestId} className="flex items-center justify-between gap-4 py-3">
+                      <li key={approval.requestId} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div className="min-w-0">
                           <Link
                             href={`/requests/${approval.requestId}`}
@@ -71,7 +71,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                           </Link>
                           <p className="text-xs text-muted">{formatDate(approval.createdAt)}</p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
                           <Money value={approval.total} className="text-sm font-semibold" />
                           <StatusPill status={approval.status} />
                         </div>

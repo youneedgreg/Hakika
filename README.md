@@ -2,6 +2,14 @@
 
 Hakika helps an owner approve construction purchases and release payments only after work is supported by evidence from the site. This demo uses fictional people and sample project data.
 
+## Screenshots
+
+These screenshots show the local demo experience. The project details view is marked as sample data, not a live project record.
+
+![Hakika landing page](public/judge/readme-home.png)
+
+![Project details with sample data](public/judge/project-details.png)
+
 ## Built with
 
 - Next.js, React, TypeScript, and Tailwind CSS
