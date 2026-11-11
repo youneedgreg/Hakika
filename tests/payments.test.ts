@@ -14,7 +14,8 @@ import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks"
 import { sendPaymentConfirmations } from "@/server/payments/confirmations";
 import { loadLedger } from "@/server/projects/ledger";
 import { ledgerToCsv } from "@/server/csv";
-import { declineRequest } from "@/server/requests/decline";
+import { declineRequest, notifyDeclined } from "@/server/requests/decline";
+import { renderTemplate } from "@/server/whatsapp/templates";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -654,7 +655,7 @@ describe("declining a request", () => {
 
   it("stores the reason, marks the request declined and logs it in the money trail", async () => {
     const request = await addRequest();
-    expect(await decline(request.id)).toEqual({ ok: true, value: { requestId: request.id, status: "declined" } });
+    expect(await decline(request.id)).toEqual({ ok: true, value: { requestId: request.id, status: "declined" }, newlyDeclined: true });
 
     const [row] = await db.select().from(s.requests).where(eq(s.requests.id, request.id));
     expect(row).toMatchObject({ status: "declined", declineReason: "Too expensive, ask Mlima for a better price." });
@@ -671,7 +672,7 @@ describe("declining a request", () => {
   it("answers a repeated decline with the first one", async () => {
     const request = await addRequest();
     await decline(request.id, "First reason.");
-    expect(await decline(request.id, "Clicked twice.")).toEqual({ ok: true, value: { requestId: request.id, status: "declined" } });
+    expect(await decline(request.id, "Clicked twice.")).toEqual({ ok: true, value: { requestId: request.id, status: "declined" }, newlyDeclined: false });
     const [row] = await db.select().from(s.requests).where(eq(s.requests.id, request.id));
     expect(row.declineReason).toBe("First reason.");
     expect(await actions(request.id)).toEqual(["request.declined"]);
@@ -712,5 +713,54 @@ describe("declining a request", () => {
 
   it("is not found for a request that doesn't exist", async () => {
     expect(await decline("req_doesnotexist0000")).toMatchObject({ ok: false, httpStatus: 404, code: "not_found" });
+  });
+
+  describe("telling the foreman", () => {
+    const PETER_TEST_PHONE = "+15550000101";
+    const whatsapp = () => ({ send: vi.fn(async () => "SM-declined"), testPhones: new Map([[PETER_TEST_PHONE, DEMO.contactIds.peter]]) });
+    const outboundTo = (contactId: string) => db.select().from(s.messages)
+      .where(and(eq(s.messages.contactId, contactId), eq(s.messages.direction, "outbound")));
+
+    it("sends the fixed template to a test phone, without the owner's reason, and logs it", async () => {
+      const request = await addRequest();
+      await decline(request.id, "Baraka is overcharging, call me.");
+      const fakes = whatsapp();
+      expect(await notifyDeclined(db, fakes, request.id)).toEqual({ contactId: DEMO.contactIds.peter, sent: true });
+
+      const body = renderTemplate("request_declined", "sw"); // Peter writes in Swahili
+      expect(fakes.send).toHaveBeenCalledWith(PETER_TEST_PHONE, body);
+      const [message] = await outboundTo(DEMO.contactIds.peter);
+      expect(message).toMatchObject({ channel: "whatsapp", templateKey: "request_declined", body, twilioSid: "SM-declined" });
+      expect(message.body).not.toMatch(/Baraka|overcharging/);
+      expect(await actions(request.id)).toEqual(["request.declined", "request.decline_notified"]);
+    });
+
+    it("stores it unsent for a contact without a test phone", async () => {
+      const request = await addRequest();
+      await decline(request.id);
+      const fakes = { send: vi.fn(async () => "SM-x"), testPhones: new Map<string, string>() };
+      expect(await notifyDeclined(db, fakes, request.id)).toEqual({ contactId: DEMO.contactIds.peter, sent: false, reason: "no_test_phone" });
+      expect(fakes.send).not.toHaveBeenCalled();
+      expect(await outboundTo(DEMO.contactIds.peter)).toHaveLength(1);
+    });
+
+    it("answers a request sent from Judge Mode on the simulator, never on WhatsApp", async () => {
+      const [inbound] = await db.insert(s.messages).values({
+        projectId: DEMO.projectId, contactId: DEMO.contactIds.peter, direction: "inbound", channel: "simulator", kind: "image",
+      }).returning();
+      const request = await addRequest({ messageId: inbound.id });
+      await decline(request.id);
+      const fakes = whatsapp();
+      expect(await notifyDeclined(db, fakes, request.id)).toMatchObject({ sent: false, reason: "simulator" });
+      expect(fakes.send).not.toHaveBeenCalled();
+      expect((await outboundTo(DEMO.contactIds.peter))[0]).toMatchObject({ channel: "simulator", templateKey: "request_declined" });
+    });
+
+    it("says nothing for a request that wasn't declined", async () => {
+      const request = await addRequest();
+      const fakes = whatsapp();
+      expect(await notifyDeclined(db, fakes, request.id)).toBeNull();
+      expect(fakes.send).not.toHaveBeenCalled();
+    });
   });
 });

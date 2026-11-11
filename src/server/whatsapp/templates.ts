@@ -68,6 +68,12 @@ const TEMPLATES = {
     en: "Hakika: we need a new proof photo for {milestone}. Your new code is {code}. Write it on paper, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
     sw: "Hakika: tunahitaji picha mpya ya uthibitisho kwa {milestone}. Nambari mpya ya uthibitisho ni {code}. Iandike kwenye karatasi, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa WhatsApp, kisha tuma eneo ulipo.",
   },
+  // To the foreman whose request the owner declined. No slots on purpose: the owner's reason is
+  // their own words, and the supplier's name on a quote was read by a model.
+  request_declined: {
+    en: "Hakika: the owner did not approve your latest materials request. Nothing was paid. If the materials are still needed, send a new quote.",
+    sw: "Hakika: mmiliki wa mradi hakuidhinisha ombi lako la hivi karibuni la vifaa. Hakuna kilicholipwa. Ikiwa vifaa bado vinahitajika, tuma nukuu mpya ya bei.",
+  },
   // To the fundi, once the owner has paid their labour for a verified milestone.
   labour_paid: {
     en: "Hakika: the owner has paid you {amount} through PayPal for {milestone}. Thank you.",
