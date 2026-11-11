@@ -6,11 +6,12 @@
 
 > **Status: proposed.** These dates still need agreeing between Greg and Juliet. They fit about 20 days of Greg's planned work and all of Juliet's remaining build into 11 days, so they are very tight. If a gate slips, use the [cut order](#if-a-gate-slips).
 >
-> **Where we are, 11 Nov:**
-> - **The main app and API work through PR #31 is merged.** This includes the quote pipeline and owner summary ([#10](https://github.com/youneedgreg/Hakika/pull/10), [#13](https://github.com/youneedgreg/Hakika/pull/13)), PayPal orders and webhooks ([#15](https://github.com/youneedgreg/Hakika/pull/15), [#23](https://github.com/youneedgreg/Hakika/pull/23)), proof codes and verification ([#24](https://github.com/youneedgreg/Hakika/pull/24), [#25](https://github.com/youneedgreg/Hakika/pull/25)), milestone payments and override ([#26](https://github.com/youneedgreg/Hakika/pull/26)), Judge Mode ([#21](https://github.com/youneedgreg/Hakika/pull/21)), and Juliet's owner-facing contract/UI updates ([#30](https://github.com/youneedgreg/Hakika/pull/30)).
-> - **Gate 1 passed locally on 6 Nov.** Gate 2 was last recorded as not run; confirm the hosted money/proof loop with real phones before recording or dress rehearsal.
-> - **Juliet's application work is merged.** The landing page exists, and the README now has local screenshots of the landing page and sample project details. No Swahili voice-note fixture is present in `tests/fixtures`; confirm or provide one. Remaining work: hosted phone QA and a bug list, then screen recording, rough cut, captions/voiceover, picture lock, YouTube publication and Devpost copy. Recording/publishing status is not verifiable from this repository.
-> - **Still open on Greg's lane:** Ask Hakika's route, the security pass and AI eval numbers. Local data-backed pages also need a configured database to run; coordinate environment setup before QA.
+> **Where we are, Wed 11 Nov evening:**
+> - **Everything in the plan's build is merged** through [#37](https://github.com/youneedgreg/Hakika/pull/37): the quote pipeline and owner summary ([#10](https://github.com/youneedgreg/Hakika/pull/10), [#13](https://github.com/youneedgreg/Hakika/pull/13)), PayPal orders and webhooks ([#15](https://github.com/youneedgreg/Hakika/pull/15), [#23](https://github.com/youneedgreg/Hakika/pull/23)), proof codes and verification ([#24](https://github.com/youneedgreg/Hakika/pull/24), [#25](https://github.com/youneedgreg/Hakika/pull/25), [#22](https://github.com/youneedgreg/Hakika/pull/22)), milestone payments and override ([#26](https://github.com/youneedgreg/Hakika/pull/26)), Judge Mode ([#21](https://github.com/youneedgreg/Hakika/pull/21)), Juliet's pages ([#30](https://github.com/youneedgreg/Hakika/pull/30)), Ask Hakika on Nova with PayPal's Agent Toolkit ([#33](https://github.com/youneedgreg/Hakika/pull/33)), the README ([#34](https://github.com/youneedgreg/Hakika/pull/34)), decline ([#36](https://github.com/youneedgreg/Hakika/pull/36)) and judge-facing fixes ([#37](https://github.com/youneedgreg/Hakika/pull/37)).
+> - **Gate 1 passed on the hosted demo on 11 Nov:** an inflated quote became an approval card, the owner approved in the PayPal sandbox, the request shows Paid, and the money trail has the order, the capture, the WhatsApp confirmation and PayPal's signed webhook.
+> - **Gate 2 with real phones was not run.** The same loop runs end to end in Judge Mode's simulator and in tests.
+> - **Not done:** the security pass and AI eval numbers as separate pieces of work (the tests already cover quote photos aimed at the model and the Ask Hakika rate limit), and the WhatsApp 24-hour window check.
+> - **Submission:** the video is being edited; Devpost closes Thu 12 Nov, 11:00pm Nairobi.
 
 ## Workflow
 
@@ -34,10 +35,10 @@ flowchart TB
     G4["Merged 7 Nov, PRs #23 and #24<br/>PayPal webhooks, confirmations,<br/>proof requests and upload"]:::done
     G5["Merged 7 Nov, PRs #25 and #22<br/>Verification engine,<br/>Nova vision, holds"]:::done
     G6["Merged 7 Nov, PR #26<br/>Milestones, labour payment,<br/>override"]:::done
-    G7["Now: Judge Mode logic merged 7 Nov, PR #21<br/>Next: Ask Hakika, live run<br/>on the hosted demo"]:::now
-    G8["Mon 9 Nov<br/>Security pass, tests,<br/>AI eval numbers"]:::next
-    G9["Tue 10 Nov<br/>README technical sections,<br/>QA fixes"]:::next
-    G10["Wed 11 Nov<br/>Devpost technical sections,<br/>testing instructions"]:::next
+    G7["Merged 7 and 11 Nov, PRs #21 and #33<br/>Judge Mode logic,<br/>Ask Hakika"]:::done
+    G8["Not done<br/>Security pass,<br/>AI eval numbers"]:::next
+    G9["Merged 11 Nov, PRs #34, #36, #37<br/>README, decline,<br/>QA fixes"]:::done
+    G10["Now, 11 Nov<br/>Gate 1 on the hosted demo,<br/>Devpost and testing instructions"]:::now
     G0 --> G1 --> G1B --> G2 --> G2B --> G3 --> G4 --> G5 --> G6 --> G7 --> G8 --> G9 --> G10
   end
 
@@ -95,7 +96,7 @@ flowchart TB
 |---|---|---|---|
 | **By Mon 2 Nov** | Done 31 Oct: Vercel variables, sandbox webhook, real phone test | Send template copy (EN and SW), price sheet and quotes, Swahili voice notes, code photos and site photos | **Gate 0, passed 31 Oct:** a real WhatsApp message is stored and answered with a template |
 | **Tue 3 Nov** | Merged 1 Nov: Groq Whisper translation, Nova parsing and quote reading, pricing engine, daily USD/KES rate, over 40 pricing tests. Merged 2 Nov ([#10](https://github.com/youneedgreg/Hakika/pull/10)): quote photo to checked request | Merged 2 Nov: overview page, approval card and PayPal button on mock data | Done: a quote photo becomes a parsed request; pricing tests pass |
-| **Wed 4 Nov** | Merged: owner summary with number guard (3 Nov, [#13](https://github.com/youneedgreg/Hakika/pull/13)), PayPal create order (supplier as payee) and capture (7 Nov, [#15](https://github.com/youneedgreg/Hakika/pull/15)) | Merged 2 Nov: Bryntum Gantt on mock data | **Gate 1:** quote to approval card, approve in PayPal sandbox, shows Paid. **Passed locally 6 Nov; not yet on the hosted demo** |
+| **Wed 4 Nov** | Merged: owner summary with number guard (3 Nov, [#13](https://github.com/youneedgreg/Hakika/pull/13)), PayPal create order (supplier as payee) and capture (7 Nov, [#15](https://github.com/youneedgreg/Hakika/pull/15)) | Merged 2 Nov: Bryntum Gantt on mock data | **Gate 1:** quote to approval card, approve in PayPal sandbox, shows Paid. **Passed locally 6 Nov and on the hosted demo 11 Nov** |
 | **Thu 5 Nov** | Merged 7 Nov ([#23](https://github.com/youneedgreg/Hakika/pull/23), [#24](https://github.com/youneedgreg/Hakika/pull/24)): PayPal webhooks, WhatsApp confirmations, audit events, proof codes, single-use links, upload, WhatsApp pin fallback | Approval card on real routes, money trail page | Payments appear in the money trail; a phone proof is stored with code, location and time. **Not run with a real phone yet** |
 | **Fri 6 Nov** | Merged 7 Nov ([#25](https://github.com/youneedgreg/Hakika/pull/25), [#22](https://github.com/youneedgreg/Hakika/pull/22)): verification engine (dHash, duplicates, geofence, freshness, code), Nova vision checks, outcome rule, holds | Proof capture page (Android Chrome and iPhone Safari), proof review page | Test photos get the expected verdicts. **Done in tests and on Nova with demo photos** |
 | **Sat 7 Nov** | Merged 7 Nov ([#26](https://github.com/youneedgreg/Hakika/pull/26)): milestone flow, labour payment, fresh proof request, override with logged reason | Gantt on real data, alerts, override dialog, loading and error states | **Gate 2:** full money loop on the hosted demo with real phones. **Not run yet** |
