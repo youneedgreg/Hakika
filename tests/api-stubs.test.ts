@@ -4,7 +4,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { GET as getProject } from "@/app/api/projects/[id]/route";
 import { GET as getRequest } from "@/app/api/requests/[id]/route";
 import { POST as declineRequest } from "@/app/api/requests/[id]/decline/route";
 import { POST as createOrder } from "@/app/api/payments/orders/route";
@@ -52,21 +51,6 @@ function post(path: string, body: unknown) {
 function ctx<P extends Record<string, string>>(params: P) {
   return { params: Promise.resolve(params) };
 }
-
-describe("project routes", () => {
-  it("returns the demo project", async () => {
-    const project = await getProject(get(`/api/projects/${DEMO_PROJECT_ID}`), ctx({ id: DEMO_PROJECT_ID }));
-    expect(project.status).toBe(200);
-    expect(project.headers.get("x-hakika-mock")).toBe("1");
-    expect((await project.json()).milestones).toHaveLength(5);
-  });
-
-  it("returns 404 with an error body for an unknown project", async () => {
-    const res = await getProject(get("/api/projects/nope"), ctx({ id: "nope" }));
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: { code: "not_found", message: "Project not found." } });
-  });
-});
 
 describe("request routes", () => {
   it("returns the approval card with its findings", async () => {

@@ -8,6 +8,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEMO, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
+import { loadProjectDetails } from "@/server/projects/details";
 import { loadOverview } from "@/server/projects/overview";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
@@ -129,5 +130,30 @@ describe("the overview", () => {
     expect((await overview()).ledger).toMatchObject({
       spent: { amount: "39500.00", currency: "KES" }, spentUsd: { amount: "305.73", currency: "USD" }, paymentsCount: 1,
     });
+  });
+});
+
+describe("the project details", () => {
+  it("is null for an unknown project", async () => {
+    expect(await loadProjectDetails(db, "nope")).toBeNull();
+  });
+
+  it("shows the seeded project, its milestones with planned materials, contacts and suppliers", async () => {
+    const details = (await loadProjectDetails(db, DEMO.projectId))!;
+    expect(details).toMatchObject({
+      id: DEMO.projectId,
+      owner: { name: "Wanjiru Kamau" },
+      budget: { currency: "KES" },
+    });
+    expect(details.milestones).toHaveLength(5);
+    expect(details.milestones[1]).toMatchObject({ id: "m2", name: "Foundation", status: "in_progress" });
+    expect(details.milestones[1].plannedMaterials.map((m) => m.itemKey)).toContain("cement_50kg");
+    expect(details.contacts.map((c) => c.id)).toContain(peter);
+    expect(details.suppliers.length).toBeGreaterThan(0);
+  });
+
+  it("shows a milestone's live status", async () => {
+    await db.update(s.milestones).set({ status: "held" }).where(eq(s.milestones.id, "m2"));
+    expect((await loadProjectDetails(db, DEMO.projectId))!.milestones[1].status).toBe("held");
   });
 });

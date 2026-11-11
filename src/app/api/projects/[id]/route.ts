@@ -1,11 +1,12 @@
-// GET /api/projects/[id] — project details. Mock data until the database is built.
+// GET /api/projects/[id] — project details, from the database.
 
 import type { NextRequest } from "next/server";
-import { mockJson, notFound } from "@/server/http";
-import { DEMO_PROJECT_ID, projectDetails } from "@/server/mocks/demo";
+import { getDb } from "@/server/db/client";
+import { notFound } from "@/server/http";
+import { loadProjectDetails } from "@/server/projects/details";
 
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/projects/[id]">) {
   const { id } = await ctx.params;
-  if (id !== DEMO_PROJECT_ID) return notFound("Project");
-  return mockJson(projectDetails);
+  const details = await loadProjectDetails(getDb(), id);
+  return details ? Response.json(details) : notFound("Project");
 }
