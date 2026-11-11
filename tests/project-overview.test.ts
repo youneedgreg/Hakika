@@ -43,7 +43,8 @@ describe("the overview", () => {
 
   it("lists a request waiting on the owner at the amount they'd pay, and its worst finding", async () => {
     const request = await addRequest({
-      status: "awaiting_approval", quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 4_750_000, recommendedTotalKesCents: 3_950_000,
+      status: "awaiting_approval", quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 4_750_000,
+      recommendedSupplierId: DEMO.supplierIds.mlima, recommendedTotalKesCents: 3_950_000,
     });
     await db.insert(s.requestLines).values([
       { requestId: request.id, position: 0, itemKey: "cement_50kg", description: "Cement, 50 kg bag", qty: 50, unit: "bag", unitPriceKesCents: 95_000 },
@@ -58,13 +59,20 @@ describe("the overview", () => {
     const { approvals, alerts } = await overview();
     expect(approvals).toEqual([{
       requestId: request.id,
-      title: "Cement, 50 kg bag and 1 more from Baraka Hardware",
+      title: "Cement, 50 kg bag and 1 more from Mlima Hardware",
       status: "awaiting_approval",
       total: { amount: "39500.00", currency: "KES" },
       createdAt: request.createdAt.toISOString(),
     }]);
     expect(alerts).toEqual([{
       id: expect.any(String), kind: "price_warning", severity: "block", message: "The total doesn't match.", link: { requestId: request.id },
+    }]);
+  });
+
+  it("names the supplier on the quote only when it shows the quote's own total", async () => {
+    const request = await addRequest({ status: "awaiting_approval", quotedSupplierName: "Baraka Hardware", quotedTotalKesCents: 4_750_000 });
+    expect((await overview()).approvals).toMatchObject([{
+      requestId: request.id, title: "Materials from Baraka Hardware", total: { amount: "47500.00", currency: "KES" },
     }]);
   });
 
