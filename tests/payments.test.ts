@@ -14,6 +14,7 @@ import { handlePayPalEvent, type PayPalEvent } from "@/server/payments/webhooks"
 import { sendPaymentConfirmations } from "@/server/payments/confirmations";
 import { loadLedger } from "@/server/projects/ledger";
 import { ledgerToCsv } from "@/server/csv";
+import { declineRequest } from "@/server/requests/decline";
 
 const db = drizzle({ client: new PGlite(), schema: s, casing: "snake_case" });
 const MLIMA_EMAIL = "mlima@business.example.com";
@@ -644,5 +645,72 @@ describe("holds from proof verdicts (Day 12)", () => {
     await holdMilestone();
     const request = await addRequest({ milestoneId: "m3" });
     expect((await createOrderForRequest(db, request.id, deps())).ok).toBe(true);
+  });
+});
+
+describe("declining a request", () => {
+  const decline = (requestId: string, reason = "Too expensive, ask Mlima for a better price.") =>
+    declineRequest({ db }, requestId, reason);
+
+  it("stores the reason, marks the request declined and logs it in the money trail", async () => {
+    const request = await addRequest();
+    expect(await decline(request.id)).toEqual({ ok: true, value: { requestId: request.id, status: "declined" } });
+
+    const [row] = await db.select().from(s.requests).where(eq(s.requests.id, request.id));
+    expect(row).toMatchObject({ status: "declined", declineReason: "Too expensive, ask Mlima for a better price." });
+    const [event] = await db.select().from(s.auditEvents).where(eq(s.auditEvents.requestId, request.id));
+    expect(event).toMatchObject({
+      kind: "request", action: "request.declined", actor: `owner:${DEMO.ownerId}`, amountKesCents: null,
+      description: 'The owner declined this request. Reason: "Too expensive, ask Mlima for a better price.". Nothing was paid.',
+    });
+    const ledger = await loadLedger(db, DEMO.projectId);
+    expect(ledger?.at(-1)).toMatchObject({ kind: "request", link: { requestId: request.id } });
+    expect(sandbox.counts).toEqual({ create: 0, capture: 0 });
+  });
+
+  it("answers a repeated decline with the first one", async () => {
+    const request = await addRequest();
+    await decline(request.id, "First reason.");
+    expect(await decline(request.id, "Clicked twice.")).toEqual({ ok: true, value: { requestId: request.id, status: "declined" } });
+    const [row] = await db.select().from(s.requests).where(eq(s.requests.id, request.id));
+    expect(row.declineReason).toBe("First reason.");
+    expect(await actions(request.id)).toEqual(["request.declined"]);
+  });
+
+  it("closes an unpaid PayPal order, so a late approval can't be captured", async () => {
+    const request = await addRequest();
+    const orderId = await createOrder(request.id);
+    await decline(request.id);
+    sandbox.approve(orderId);
+
+    const capture = await captureOrderForRequest(db, orderId, deps());
+    expect(capture).toMatchObject({ ok: false, httpStatus: 409 });
+    expect(sandbox.counts.capture).toBe(0);
+    expect((await paymentsFor(request.id)).map((p) => p.status)).toEqual(["failed"]);
+    expect(await requestStatus(request.id)).toBe("declined");
+    expect(await actions(request.id)).toEqual(["payment.order_created", "payment.order_closed", "request.declined"]);
+  });
+
+  it("refuses a request that was paid, and one with a capture still pending at PayPal", async () => {
+    const paid = await addRequest();
+    const orderId = await createOrder(paid.id);
+    sandbox.approve(orderId);
+    expect((await captureOrderForRequest(db, orderId, deps())).ok).toBe(true);
+    expect(await decline(paid.id)).toMatchObject({ ok: false, httpStatus: 409, code: "not_awaiting_approval" });
+    expect(await requestStatus(paid.id)).toBe("paid");
+
+    const pending = await addRequest();
+    const [payment] = await db.insert(s.payments).values({
+      projectId: DEMO.projectId, kind: "materials", requestId: pending.id, payeeSupplierId: DEMO.supplierIds.mlima,
+      payeeEmail: MLIMA_EMAIL, amountKesCents: 3_950_000, amountUsdCents: 30_389, kesPerUsd: "129.98",
+      paypalRequestId: "capture-pending", paypalOrderId: "ORDER-PENDING", paypalCaptureId: "CAP-PENDING",
+    }).returning();
+    expect(await decline(pending.id)).toMatchObject({ ok: false, httpStatus: 409, code: "capture_pending" });
+    expect((await db.select().from(s.payments).where(eq(s.payments.id, payment.id)))[0].status).toBe("created");
+    expect(await requestStatus(pending.id)).toBe("awaiting_approval");
+  });
+
+  it("is not found for a request that doesn't exist", async () => {
+    expect(await decline("req_doesnotexist0000")).toMatchObject({ ok: false, httpStatus: 404, code: "not_found" });
   });
 });
