@@ -2,6 +2,7 @@
 // is the in-app notification.
 
 import { PGlite } from "@electric-sql/pglite";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -101,6 +102,17 @@ describe("the overview", () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({ kind: "quote_problem", severity: "block", link: { requestId: request.id } });
     expect(alerts[0].message).not.toContain("IGNORE");
+  });
+
+  it("alerts on a held milestone, and stops once it is no longer held", async () => {
+    await db.update(s.milestones).set({ status: "held" }).where(eq(s.milestones.id, "m2"));
+    expect((await overview()).alerts).toEqual([{
+      id: "held-m2", kind: "payment_held", severity: "block",
+      message: expect.stringMatching(/^Foundation is held: a proof photo failed its checks/),
+      link: {}, // no proof on record in this test; Judge Mode's test checks the link
+    }]);
+    await db.update(s.milestones).set({ status: "in_progress" }).where(eq(s.milestones.id, "m2"));
+    expect((await overview()).alerts).toEqual([]);
   });
 
   it("counts only captured payments in the ledger", async () => {
