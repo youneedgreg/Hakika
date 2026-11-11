@@ -8,7 +8,6 @@ import type { ReactNode } from "react";
 const navItems = [
   { href: "/projects/demo-nyeri", label: "Project" },
   { href: "/judge", label: "Judge Mode" },
-  { href: "/components", label: "Components" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
