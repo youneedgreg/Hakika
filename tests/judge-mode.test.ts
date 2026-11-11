@@ -334,6 +334,11 @@ describe("the simulator's chat", () => {
     const code = chat.find((m) => m.templateKey === "proof_request");
     expect(code?.text).toContain(JUDGE_DELIVERY_CODE);
     expect(code?.text).toContain("[link hidden]");
+    // Peter reads Swahili; judges also see each Hakika message in English, same code, same hidden link.
+    expect(code?.textEn).toMatch(/^Hakika: your proof code for .+ is \w+\. .*\[link hidden\]/);
+    expect(code?.textEn).toContain(JUDGE_DELIVERY_CODE);
+    expect(chat.filter((m) => m.direction === "outbound").every((m) => m.textEn)).toBe(true);
+    expect(inbound.every((m) => m.textEn === undefined)).toBe(true);
 
     const later = await loadJudgeChat(db, DEMO.projectId, new Date(chat.at(-1)!.at));
     expect(later).toEqual([]);

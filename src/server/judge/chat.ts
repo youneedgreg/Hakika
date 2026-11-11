@@ -4,6 +4,7 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import type { AnyDb } from "@/server/db/client";
 import { DEMO, type DemoPayees, resetDemo } from "@/server/db/demo";
 import * as s from "@/server/db/schema";
+import { translateTemplate } from "@/server/whatsapp/templates";
 import type { JudgeChatMessage } from "@/shared/api";
 
 export const CHAT_LIMIT = 200;
@@ -23,17 +24,23 @@ export async function loadJudgeChat(db: AnyDb, projectId: string, after?: Date):
     .orderBy(asc(s.messages.createdAt), asc(s.messages.id))
     .limit(CHAT_LIMIT);
 
-  return rows.map(({ message: m, contact }) => ({
-    id: m.id,
-    at: m.createdAt.toISOString(),
-    direction: m.direction,
-    contact: contact?.id ? contact : null,
-    kind: m.kind,
-    text: m.body,
-    ...(m.mediaPath && m.mediaContentType?.startsWith("image/") ? { imageUrl: judgeMessageImageUrl(m.id) } : {}),
-    ...(m.latitude != null && m.longitude != null ? { location: { lat: m.latitude, lng: m.longitude } } : {}),
-    ...(m.templateKey ? { templateKey: m.templateKey } : {}),
-  }));
+  return rows.map(({ message: m, contact }) => {
+    const english = m.direction === "outbound" && m.templateKey && m.body && m.language && m.language !== "en"
+      ? translateTemplate(m.templateKey, m.language, m.body, "en")
+      : null;
+    return {
+      id: m.id,
+      at: m.createdAt.toISOString(),
+      direction: m.direction,
+      contact: contact?.id ? contact : null,
+      kind: m.kind,
+      text: m.body,
+      ...(m.mediaPath && m.mediaContentType?.startsWith("image/") ? { imageUrl: judgeMessageImageUrl(m.id) } : {}),
+      ...(m.latitude != null && m.longitude != null ? { location: { lat: m.latitude, lng: m.longitude } } : {}),
+      ...(m.templateKey ? { templateKey: m.templateKey } : {}),
+      ...(english ? { textEn: english } : {}),
+    };
+  });
 }
 
 export function judgeMessageImageUrl(messageId: string): string {

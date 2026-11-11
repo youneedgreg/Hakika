@@ -152,5 +152,6 @@ export type JudgeChatMessage = {
   imageUrl?: string; // /api/judge/messages/[id]/image
   location?: { lat: number; lng: number };
   templateKey?: string;
+  textEn?: string; // an outbound template sent in Swahili, in English for judges
 };
 export type JudgeChatResult = { projectId: string; messages: JudgeChatMessage[] };

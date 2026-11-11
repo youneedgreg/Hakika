@@ -88,6 +88,27 @@ export function renderTemplate<K extends TemplateKey>(
   });
 }
 
+// The same message in another language, for Judge Mode, whose judges may not read Swahili. The
+// slot values are read back out of the stored text by matching it against its own template, so
+// nothing is translated by a model. Null when the text doesn't match its template.
+export function translateTemplate(key: string, from: Language, body: string, to: Language): string | null {
+  if (!Object.hasOwn(TEMPLATES, key)) return null;
+  if (from === to) return body;
+  const template = TEMPLATES[key as TemplateKey];
+  const seen = new Set<string>();
+  const pattern = template[from].split(/(\{\w+\})/).map((part) => {
+    const slot = /^\{(\w+)\}$/.exec(part)?.[1];
+    if (!slot) return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (seen.has(slot)) return `\\k<${slot}>`;
+    seen.add(slot);
+    return `(?<${slot}>[\\s\\S]+?)`;
+  }).join("");
+  const match = new RegExp(`^${pattern}$`).exec(body);
+  if (!match) return null;
+  const values = match.groups ?? {};
+  return template[to].replace(/\{(\w+)\}/g, (_, slot: string) => values[slot] ?? `{${slot}}`);
+}
+
 // For tests: every key, and the slots each language uses.
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[];
 export function templateSlots(key: TemplateKey, language: Language): string[] {
