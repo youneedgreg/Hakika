@@ -283,6 +283,10 @@ describe("Recycled photo", () => {
     expect(result.outcome).not.toMatch(/Suspicious\. Suspicious/); // the verdict word once
     expect(result.links.map((l) => l.href)).toEqual([`/proofs/${result.proofId}`, `/projects/${DEMO.projectId}/gantt`]);
 
+    // Peter hears his photo arrived first, then gets a fresh code for the failed proof.
+    const replies = (await outbound()).map((m) => m.templateKey);
+    expect(replies.slice(-2)).toEqual(["proof_photo_and_location_received", "fresh_proof_request"]);
+
     const labour = await createOrderForMilestone(db, "m2", { paypal: noPayPal, appUrl: LINK_BASE, rate: async () => ({ kesPerUsd: "129.980973" }) });
     expect(labour).toMatchObject({ ok: false, code: expect.stringMatching(/milestone_held|not_verified/) });
   });

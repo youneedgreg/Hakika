@@ -37,10 +37,20 @@ const TEMPLATES = {
     en: "Hakika: your proof code for {milestone} is {code}. Write it on paper or on the delivered goods, then take the photo at the site with this link: {link} The code expires in 30 minutes. If the link does not open, send the photo here, then share your location.",
     sw: "Hakika: nambari yako ya uthibitisho kwa {milestone} ni {code}. Iandike kwenye karatasi au kwenye mzigo uliofika, kisha piga picha ukiwa eneo la ujenzi kupitia kiungo hiki: {link} Nambari itaisha baada ya dakika 30. Kiungo kisipofunguka, tuma picha hapa WhatsApp, kisha tuma eneo ulipo.",
   },
-  // A proof photo sent in the chat (for people who can't open the link).
+  // A proof photo sent in the chat (for people who can't open the link), with no location pin yet.
   proof_photo_received: {
-    en: "Hakika: we received your proof photo. If you have not shared your location yet, share it now.",
-    sw: "Hakika: tumepokea picha yako ya uthibitisho. Ikiwa bado hujatuma mahali ulipo, tafadhali tuma sasa.",
+    en: "Hakika: we received your proof photo. Please share your location now.",
+    sw: "Hakika: tumepokea picha yako ya uthibitisho. Tafadhali tuma mahali ulipo sasa.",
+  },
+  // A proof photo sent in the chat just after a location pin.
+  proof_photo_and_location_received: {
+    en: "Hakika: we received your proof photo and your location.",
+    sw: "Hakika: tumepokea picha yako ya uthibitisho na mahali ulipo.",
+  },
+  // A location pin shared just after a proof photo.
+  proof_location_received: {
+    en: "Hakika: we received your location for the proof photo.",
+    sw: "Hakika: tumepokea mahali ulipo kwa ajili ya picha ya uthibitisho.",
   },
   // A PROOF reply when nothing is waiting for proof.
   no_proof_due: {

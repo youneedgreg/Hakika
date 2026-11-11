@@ -271,6 +271,8 @@ describe("the WhatsApp fallback", () => {
     expect((await proofRequestRows())[0].status).toBe("used");
 
     await processInbound(deps, await peter(), pin());
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("proof_location_received", "sw"));
+    expect(deps.afterReply).not.toHaveBeenCalled(); // the pin isn't read as a request either
     const [located] = await db.select().from(s.proofs);
     expect(located).toMatchObject({ captureLat: -0.4202, captureLng: 36.9477, accuracyM: null });
     expect(await auditActions()).toEqual(["proof.requested", "proof.received", "proof.location_added"]);
@@ -282,8 +284,16 @@ describe("the WhatsApp fallback", () => {
     await processInbound(deps, await peter(), pin());
     deps.loadMedia.mockResolvedValue({ bytes: await photo(), contentType: "image/jpeg", extension: "jpg" });
     await processInbound(deps, await peter(), image());
+    // The pin is already there, so the reply doesn't ask for it again.
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("proof_photo_and_location_received", "sw"));
     const [proof] = await db.select().from(s.proofs);
     expect(proof).toMatchObject({ source: "whatsapp", captureLat: -0.4202, captureLng: 36.9477 });
+  });
+
+  it("answers a pin that belongs to no proof photo as an ordinary message", async () => {
+    const deps = intakeFakes();
+    await processInbound(deps, await peter(), pin());
+    expect(deps.send).toHaveBeenLastCalledWith(REAL_PHONE, renderTemplate("request_received", "sw"));
   });
 
   it("reads a photo as a quote when there is no open code", async () => {
