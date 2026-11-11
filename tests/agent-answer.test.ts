@@ -120,6 +120,27 @@ describe("answering", () => {
     expect(result.citations.map((c) => c.href)).toEqual([`/proofs/${ref.slice("proof:".length)}`]);
   });
 
+  it("drops a tool's name cited as if it were a record (Nova did this in the live check)", async () => {
+    const result = await ask([
+      { tools: ["project_status"] },
+      { text: "The budget for the entire project is KES 4,500,000 [project_status] [project-status]. [money-trail]" },
+    ]).answer;
+    expect(result.answer).toBe("The budget for the entire project is KES 4,500,000.");
+    expect(result.citations).toEqual([{ label: "Money trail", href: `/projects/${DEMO.projectId}/money` }]);
+  });
+
+  it("links the money trail when an answer about money cites nothing (as Nova did in the live check)", async () => {
+    const result = await ask([
+      { tools: ["project_status"] },
+      { text: "You have spent KES 55,000 so far." },
+    ]).answer;
+    expect(result).toMatchObject({
+      answer: "You have spent KES 55,000 so far.",
+      citations: [{ label: "Money trail", href: `/projects/${DEMO.projectId}/money` }],
+      source: "model",
+    });
+  });
+
   it("gives a fixed sentence when the records don't answer the question", async () => {
     expect(await ask([{ tools: ["money_trail"] }, { text: "NO_RECORD" }], "Who is the architect?").answer)
       .toMatchObject({ answer: NO_RECORD, citations: [], source: "no_record" });

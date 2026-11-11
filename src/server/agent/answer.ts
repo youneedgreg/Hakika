@@ -29,8 +29,9 @@ export const UNCHECKED =
 
 // A record ref as the tools write it: request:…, proof:…, milestone:… or money-trail.
 const REF_TAG = /\[((?:request|proof|milestone):[A-Za-z0-9_-]+|money-trail)\]/g;
-// Anything else in square brackets that looks like an attempted ref; dropped from the text.
-const STRAY_TAG = /\[(?:request|proof|milestone|money-trail)[^\]]*\]/g;
+// Anything else in square brackets that looks like an attempted ref, or any single bracketed word
+// (Nova sometimes cites a tool's name instead, e.g. [project_status] or [project-status]); dropped.
+const STRAY_TAG = /\[(?:request|proof|milestone|money-trail)[^\]]*\]|\[[A-Za-z0-9_:-]+\]/g;
 
 // The model can't write links or emails: links come only from the citations.
 const FORBIDDEN = /https?:|www\.|@/i;
@@ -41,7 +42,8 @@ const SMALL_COUNT = 10;
 const SYSTEM = [
   "You are Ask Hakika. You answer questions from the owner of a house being built in Kenya, who lives abroad, about their own project.",
   "Answer only from what the tools return. Call the tools first; never answer from memory or guess.",
-  "After each sentence, cite the records it relies on by writing their refs in square brackets, exactly as the tools gave them, for example [proof:prf_123] or [money-trail]. Cite only refs the tools returned.",
+  "After each sentence, cite the records it relies on by writing their refs in square brackets, exactly as the tools gave them, for example [proof:prf_123] or [money-trail]. Refs are the `ref`, `spendingRef`, `request`, `proof` and `milestone` values in the tool results; a tool's name is never a ref. Cite only refs the tools returned.",
+  "Give a reason only if a tool states it. Don't link two facts (a price warning and a hold, say) unless a tool links them.",
   "Copy amounts, dates and names exactly as the tools give them, with their currency (KES or USD). Never add, subtract, convert or round an amount. Write every number as digits.",
   `If the records don't answer the question, reply with exactly ${NO_RECORD_TOKEN} and nothing else.`,
   "Write 1 to 4 short, plain sentences. No lists, headings, markdown, links or email addresses.",
@@ -109,5 +111,9 @@ export async function answerQuestion(deps: AnswerDeps, projectId: string, questi
     // The records the model cited are still worth opening, even though its wording isn't shown.
     return { answer: UNCHECKED, citations, source: "unchecked", rejected, toolCalls };
   }
+  // Nova often leaves amounts uncited. An answer about money that cites nothing links the money
+  // trail, if a tool returned it, so the owner can still check every amount against the records.
+  const trail = records.get("money-trail");
+  if (citations.length === 0 && trail && /\b(?:KES|USD)\b/.test(answer)) citations.push(trail);
   return { answer, citations, source: "model", toolCalls };
 }
